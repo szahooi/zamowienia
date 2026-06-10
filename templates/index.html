@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="pl" data-theme="retro">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plan obiadów</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+  </head>
+  <body class="min-h-screen bg-base-200">
+    <div id="loginScreen" class="min-h-screen grid place-items-center p-4 app-bg">
+      <form id="loginForm" class="card app-card w-full max-w-sm bg-base-100 shadow-xl">
+        <div class="card-body gap-4">
+          <h1 class="card-title text-2xl">Plan obiadów</h1>
+          <input name="username" class="input input-bordered" placeholder="Login" autocomplete="username" required />
+          <input name="password" type="password" class="input input-bordered" placeholder="Hasło" autocomplete="current-password" required />
+          <button class="btn btn-primary action-main" type="submit">Zaloguj</button>
+          <p id="loginMessage" class="text-sm opacity-70">admin / admin123 albo kierowca1 / kierowca123</p>
+        </div>
+      </form>
+    </div>
+
+    <div id="appShell" class="hidden">
+      <header class="navbar app-navbar bg-base-100 border-b border-base-300 sticky top-0 z-20">
+        <div class="flex-1">
+          <div>
+            <p class="text-xs uppercase tracking-wide text-primary font-bold">Portal zamówień</p>
+            <h1 class="text-xl font-bold">Plan obiadów</h1>
+          </div>
+        </div>
+        <div class="flex-none gap-2">
+          <span id="currentUserLabel" class="badge badge-outline"></span>
+          <button id="logoutButton" class="btn btn-sm btn-outline">Wyloguj</button>
+        </div>
+      </header>
+
+      <nav id="tabs" class="tabs tabs-boxed app-tabs m-3 overflow-x-auto">
+        <button class="tab tab-active admin-only" data-view="dashboard">Pulpit</button>
+        <button class="tab admin-only" data-view="clients">Klienci</button>
+        <button class="tab admin-only" data-view="orders">Plany</button>
+        <button class="tab admin-only" data-view="kitchen">Kuchnia</button>
+        <button class="tab" data-view="driver">Kierowca</button>
+        <button class="tab admin-only" data-view="settings">Ustawienia</button>
+      </nav>
+
+      <main class="p-3 md:p-6">
+        <section class="view active" id="dashboard">
+          <div class="grid gap-3 md:grid-cols-4">
+            <div class="stat bg-base-100 rounded-box shadow"><div class="stat-title">Klienci</div><div id="clientCount" class="stat-value">0</div></div>
+            <div class="stat bg-base-100 rounded-box shadow"><div class="stat-title">Plany</div><div id="planCount" class="stat-value">0</div></div>
+            <div class="stat bg-base-100 rounded-box shadow"><div class="stat-title">Dostawy jutro</div><div id="tomorrowCount" class="stat-value">0</div></div>
+            <div class="stat bg-base-100 rounded-box shadow"><div class="stat-title">Rejony</div><div id="regionCount" class="stat-value">0</div></div>
+          </div>
+          <div class="card app-card bg-base-100 shadow mt-4">
+            <div class="card-body">
+              <h2 class="card-title">Jutrzejsza produkcja</h2>
+              <div id="dashboardKitchen" class="grid gap-3"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="clients">
+          <div class="card app-card bg-base-100 shadow mb-4">
+            <div class="card-body">
+              <h2 class="card-title">Dodaj klienta</h2>
+              <form id="clientForm" class="grid gap-3 md:grid-cols-3">
+                <input name="name" class="input input-bordered" placeholder="Imię i nazwisko lub firma" required />
+                <input name="phone" class="input input-bordered" placeholder="Telefon" />
+                <input name="address" class="input input-bordered" placeholder="Adres dostawy" required />
+                <select name="region_id" id="clientRegion" class="select select-bordered"></select>
+                <select name="driver_id" id="clientDriver" class="select select-bordered"></select>
+                <textarea name="notes" class="textarea textarea-bordered md:col-span-2" placeholder="Uwagi"></textarea>
+                <button class="btn btn-primary action-main" type="submit">Dodaj klienta</button>
+              </form>
+            </div>
+          </div>
+          <div class="card app-card bg-base-100 shadow">
+            <div class="card-body">
+              <div class="flex flex-col md:flex-row gap-2 md:items-center md:justify-between">
+                <h2 class="card-title">Klienci</h2>
+                <div class="flex flex-wrap gap-2">
+                  <input id="clientSearch" class="input input-bordered input-sm" placeholder="Szukaj" />
+                  <select id="clientRegionFilter" class="select select-bordered select-sm"></select>
+                  <select id="clientStatusFilter" class="select select-bordered select-sm">
+                    <option value="active">Aktywni</option>
+                    <option value="inactive">Nieaktywni</option>
+                    <option value="all">Wszyscy</option>
+                  </select>
+                  <select id="clientSort" class="select select-bordered select-sm">
+                    <option value="region">Po rejonie</option>
+                    <option value="name">Po nazwie</option>
+                    <option value="driver">Po kierowcy</option>
+                  </select>
+                </div>
+              </div>
+              <div id="clientsList" class="grid gap-3"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="orders">
+          <div class="card app-card bg-base-100 shadow mb-4">
+            <div class="card-body">
+              <div class="plan-form-heading">
+                <h2 class="card-title">Dodaj plan</h2>
+                <p>Wybierz klienta, posiłek i dni dostaw. Daty nieregularne możesz wpisać zamiast stałego harmonogramu.</p>
+              </div>
+              <form id="orderForm" class="plan-form">
+                <section class="plan-form-section">
+                  <div class="plan-section-title"><span>1</span><strong>Klient i posiłek</strong></div>
+                  <div class="plan-form-grid three">
+                    <label class="form-control">
+                      <span class="label-text">Klient</span>
+                      <select name="client_id" id="orderClient" class="select select-bordered" required></select>
+                    </label>
+                    <label class="form-control">
+                      <span class="label-text">Kategoria</span>
+                      <select name="category_id" id="orderCategory" class="select select-bordered" required></select>
+                    </label>
+                    <label class="form-control">
+                      <span class="label-text">Pozycja</span>
+                      <select name="meal_id" id="orderMeal" class="select select-bordered" required></select>
+                    </label>
+                  </div>
+                </section>
+
+                <section class="plan-form-section">
+                  <div class="plan-section-title"><span>2</span><strong>Harmonogram</strong></div>
+                  <div class="plan-form-grid three">
+                    <label class="form-control">
+                      <span class="label-text">Od dnia</span>
+                      <input name="start_date" type="date" class="input input-bordered" required />
+                    </label>
+                    <label class="form-control">
+                      <span class="label-text">Do dnia</span>
+                      <input name="end_date" type="date" class="input input-bordered" required />
+                    </label>
+                    <label class="form-control">
+                      <span class="label-text">Ilość porcji</span>
+                      <input name="quantity" type="number" min="1" value="1" class="input input-bordered" required />
+                    </label>
+                  </div>
+                  <div class="weekday-row" aria-label="Dni tygodnia">
+                    <label><input type="checkbox" class="checkbox" name="days" value="1" checked /> Pon</label>
+                    <label><input type="checkbox" class="checkbox" name="days" value="2" checked /> Wt</label>
+                    <label><input type="checkbox" class="checkbox" name="days" value="3" checked /> Śr</label>
+                    <label><input type="checkbox" class="checkbox" name="days" value="4" checked /> Czw</label>
+                    <label><input type="checkbox" class="checkbox" name="days" value="5" checked /> Pt</label>
+                    <label><input type="checkbox" class="checkbox" name="days" value="6" /> Sob</label>
+                    <label><input type="checkbox" class="checkbox" name="days" value="0" /> Nd</label>
+                  </div>
+                  <div class="plan-options-row">
+                    <label class="plan-toggle"><input type="checkbox" class="checkbox" name="every_other_day" value="1" /> Co 2 dzień</label>
+                    <label class="form-control custom-dates-control">
+                      <span class="label-text">Daty nieregularne</span>
+                      <input name="custom_dates" class="input input-bordered" placeholder="2026-06-12, 2026-06-18" />
+                    </label>
+                  </div>
+                </section>
+
+                <section class="plan-form-section compact">
+                  <div class="plan-section-title"><span>3</span><strong>Uwagi i zapis</strong></div>
+                  <div class="plan-form-actions">
+                    <textarea name="notes" class="textarea textarea-bordered" placeholder="Uwagi dla biura, kuchni lub kierowcy"></textarea>
+                    <button class="btn btn-primary action-main" type="submit">Dodaj plan</button>
+                  </div>
+                </section>
+              </form>
+            </div>
+          </div>
+          <div class="card app-card bg-base-100 shadow"><div class="card-body"><h2 class="card-title">Plany</h2><div id="ordersList" class="grid gap-3"></div></div></div>
+        </section>
+
+        <section class="view" id="kitchen">
+          <div class="card app-card bg-base-100 shadow">
+            <div class="card-body">
+              <div class="flex flex-wrap gap-2 justify-between">
+                <h2 class="card-title">Raport kuchni</h2>
+                <div class="flex gap-2"><input id="kitchenDate" type="date" class="input input-bordered input-sm" /><button id="printKitchen" class="btn btn-sm btn-outline">Drukuj</button></div>
+              </div>
+              <div id="kitchenReport" class="grid gap-3"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="driver">
+          <div class="card app-card driver-panel bg-base-100 shadow">
+            <div class="card-body">
+              <div class="flex flex-wrap gap-2 items-center justify-between">
+                <h2 class="card-title">Lista kierowcy</h2>
+                <div class="flex flex-wrap gap-2">
+                  <select id="driverSelect" class="select select-bordered select-sm admin-only"></select>
+                  <input id="driverDate" type="date" class="input input-bordered input-sm" />
+                  <span id="driverDeliveryCount" class="badge badge-primary">0 dostaw</span>
+                </div>
+              </div>
+              <div id="driverList" class="grid gap-3"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="settings">
+          <div class="grid gap-4 md:grid-cols-3">
+            <div class="card app-card bg-base-100 shadow"><div class="card-body"><h2 class="card-title">Rejony</h2><form id="regionForm" class="settings-inline-form"><input name="name" class="input input-bordered" placeholder="Rejon" required /><button class="btn btn-primary">Dodaj</button></form><div id="regionsList" class="grid gap-2"></div></div></div>
+            <div class="card app-card bg-base-100 shadow"><div class="card-body"><h2 class="card-title">Kierowcy</h2><form id="driverForm" class="grid gap-2"><input name="name" class="input input-bordered" placeholder="Imię" required /><input name="phone" class="input input-bordered" placeholder="Telefon" /><button class="btn btn-primary">Dodaj</button></form><div id="driversList" class="grid gap-2"></div></div></div>
+            <div class="card app-card bg-base-100 shadow"><div class="card-body"><h2 class="card-title">Katalog</h2><form id="catalogForm" class="grid gap-2"><input name="category" class="input input-bordered" placeholder="Nowa kategoria" /><select name="category_id" id="catalogCategory" class="select select-bordered"></select><input name="meal" class="input input-bordered" placeholder="Nowa pozycja" /><button class="btn btn-primary">Zapisz</button></form><div id="catalogList" class="grid gap-2"></div></div></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="emptyTemplate"><div class="alert">Brak danych do wyświetlenia.</div></template>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  </body>
+</html>

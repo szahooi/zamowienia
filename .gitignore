@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+instance/*.sqlite3
+instance/*.sqlite3-*
+node_modules/
+static/css/app.css.map

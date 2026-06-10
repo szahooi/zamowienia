@@ -1,0 +1,332 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  [data-theme="retro"] {
+    color-scheme: light;
+    --p: 60% 0.18 48;
+    --pc: 96% 0.02 85;
+    --s: 42% 0.08 190;
+    --sc: 96% 0.02 85;
+    --a: 50% 0.17 28;
+    --ac: 96% 0.02 85;
+    --n: 28% 0.08 34;
+    --nc: 96% 0.02 85;
+    --b1: 94% 0.04 87;
+    --b2: 89% 0.05 82;
+    --b3: 82% 0.06 72;
+    --bc: 26% 0.06 38;
+    --su: 52% 0.10 145;
+    --suc: 96% 0.02 85;
+    --wa: 73% 0.13 80;
+    --wac: 28% 0.05 55;
+    --er: 44% 0.17 27;
+    --erc: 96% 0.02 85;
+  }
+}
+
+@layer components {
+  .view {
+    display: none;
+  }
+
+  .view.active {
+    display: block;
+  }
+
+  .app-bg {
+    background:
+      radial-gradient(circle at top left, rgba(180, 83, 9, 0.10), transparent 28rem),
+      linear-gradient(135deg, oklch(var(--b2)), oklch(var(--b1)));
+  }
+
+  .app-navbar {
+    box-shadow: 0 8px 22px rgba(82, 58, 36, 0.10);
+  }
+
+  .app-tabs {
+    border: 1px solid oklch(var(--b3));
+  }
+
+  .app-card,
+  .driver-card {
+    border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+    box-shadow: 0 14px 28px rgba(122, 54, 25, 0.10);
+  }
+
+  .plan-dates {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.7rem 0.85rem;
+    border-left: 4px solid oklch(var(--p));
+    border-radius: 0.65rem;
+    background: color-mix(in oklch, oklch(var(--p)) 12%, oklch(var(--b1)));
+    font-weight: 700;
+  }
+
+  .plan-dates small {
+    font-weight: 500;
+    opacity: 0.78;
+  }
+
+  .plan-notes {
+    color: color-mix(in oklch, oklch(var(--bc)) 70%, transparent);
+    font-size: 0.92rem;
+  }
+
+  .plan-form-heading {
+    display: grid;
+    gap: 0.25rem;
+    margin-bottom: 1rem;
+  }
+
+  .plan-form-heading p {
+    max-width: 48rem;
+    color: color-mix(in oklch, oklch(var(--bc)) 72%, transparent);
+    font-size: 0.95rem;
+    line-height: 1.45;
+  }
+
+  .plan-form {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .plan-form-section {
+    display: grid;
+    gap: 0.85rem;
+    padding: 1rem;
+    border: 1px solid color-mix(in oklch, oklch(var(--p)) 22%, oklch(var(--b3)));
+    border-radius: 0.7rem;
+    background: color-mix(in oklch, oklch(var(--b1)) 88%, oklch(var(--p)) 12%);
+  }
+
+  .plan-form-section.compact {
+    background: color-mix(in oklch, oklch(var(--b1)) 92%, oklch(var(--s)) 8%);
+  }
+
+  .plan-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: oklch(var(--bc));
+  }
+
+  .plan-section-title span {
+    display: inline-grid;
+    place-items: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 999px;
+    background: oklch(var(--p));
+    color: oklch(var(--pc));
+    font-size: 0.85rem;
+    font-weight: 800;
+  }
+
+  .plan-form-grid {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .plan-form-grid.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .form-control {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .form-control .label-text {
+    padding-left: 0.15rem;
+    color: color-mix(in oklch, oklch(var(--bc)) 82%, transparent);
+    font-size: 0.82rem;
+    font-weight: 800;
+  }
+
+  .weekday-row {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .weekday-row label,
+  .plan-toggle {
+    display: flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    border: 1px solid oklch(var(--b3));
+    border-radius: 0.65rem;
+    background: oklch(var(--b1));
+    font-size: 0.92rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .weekday-row label:has(input:checked),
+  .plan-toggle:has(input:checked) {
+    border-color: oklch(var(--p));
+    background: color-mix(in oklch, oklch(var(--p)) 16%, oklch(var(--b1)));
+  }
+
+  .plan-options-row {
+    display: grid;
+    grid-template-columns: minmax(9rem, auto) minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: end;
+  }
+
+  .custom-dates-control {
+    min-width: 0;
+  }
+
+  .plan-form-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: end;
+  }
+
+  .plan-form-actions textarea {
+    min-height: 3rem;
+  }
+
+  .compact-delete {
+    width: auto;
+    min-width: 5.5rem;
+  }
+
+  .settings-inline-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .action-main {
+    min-height: 3rem;
+    font-weight: 700;
+  }
+
+  .driver-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 0.75rem;
+  }
+
+  .driver-name {
+    font-size: 1.05rem;
+  }
+
+  .driver-order-buttons {
+    align-self: stretch;
+    align-content: start;
+  }
+
+  .mini-order {
+    width: 2.15rem;
+    height: 2.15rem;
+    min-height: 2.15rem;
+    border-radius: 0.65rem;
+    border: 1px solid oklch(var(--b3));
+    background: oklch(var(--b2));
+    color: oklch(var(--bc));
+    font-weight: 900;
+  }
+
+  .delivery-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .delivery-actions .btn {
+    min-height: 3rem;
+  }
+
+  .status-badge {
+    white-space: nowrap;
+  }
+
+  @media (min-width: 900px) {
+    .driver-card {
+      grid-template-columns: auto minmax(0, 1fr) minmax(22rem, auto);
+      align-items: center;
+    }
+
+    .delivery-actions {
+      grid-column: auto;
+      grid-template-columns: repeat(2, minmax(9rem, 1fr));
+    }
+  }
+
+  @media (max-width: 560px) {
+    main {
+      padding: 0.75rem;
+    }
+
+    .navbar {
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .driver-card {
+      padding: 0.75rem;
+    }
+
+    .delivery-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .delivery-actions .btn {
+      min-height: 3.25rem;
+      font-size: 0.95rem;
+    }
+
+    .mini-order {
+      width: 2rem;
+      height: 2rem;
+      min-height: 2rem;
+    }
+
+    .settings-inline-form {
+      grid-template-columns: 1fr;
+    }
+
+    .settings-inline-form .btn {
+      width: 100%;
+      min-height: 3rem;
+    }
+
+    .plan-form-section {
+      padding: 0.8rem;
+      border-radius: 0.6rem;
+    }
+
+    .plan-form-grid.three,
+    .plan-options-row,
+    .plan-form-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .weekday-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .weekday-row label,
+    .plan-toggle {
+      justify-content: flex-start;
+      padding: 0 0.75rem;
+    }
+
+    .plan-form-actions .btn {
+      width: 100%;
+    }
+  }
+}
