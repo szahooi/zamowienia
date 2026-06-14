@@ -11,6 +11,8 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect, text
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from payments_blueprint import register_payments_blueprint
+
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("OBIADY_DB", BASE_DIR / "instance" / "obiady.sqlite3"))
@@ -21,6 +23,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH.as_posix()}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
+init_payments_db = register_payments_blueprint(app, db, lambda: current_user())
 
 
 class User(db.Model):
@@ -204,6 +207,7 @@ def init_db() -> None:
     migrate_db()
     if User.query.count() == 0:
         seed_data()
+    init_payments_db()
 
 
 def migrate_db() -> None:
