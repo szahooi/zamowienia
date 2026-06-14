@@ -155,14 +155,14 @@
   .weekday-row label,
   .plan-toggle {
     display: flex;
-    min-height: 2.75rem;
+    min-height: 2.25rem;
     align-items: center;
     justify-content: center;
     gap: 0.45rem;
     border: 1px solid oklch(var(--b3));
     border-radius: 0.65rem;
     background: oklch(var(--b1));
-    font-size: 0.92rem;
+    font-size: 0.84rem;
     font-weight: 700;
     cursor: pointer;
   }
@@ -175,7 +175,7 @@
 
   .plan-options-row {
     display: grid;
-    grid-template-columns: minmax(9rem, auto) minmax(0, 1fr);
+    grid-template-columns: minmax(8rem, auto) repeat(2, minmax(0, 1fr));
     gap: 0.75rem;
     align-items: end;
   }
@@ -189,6 +189,61 @@
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.75rem;
     align-items: end;
+  }
+
+  .client-row {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.85rem 1rem;
+    border-radius: 0.65rem;
+  }
+
+  .client-row-main,
+  .client-row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .client-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.9rem;
+    color: color-mix(in oklch, oklch(var(--bc)) 72%, transparent);
+    font-size: 0.86rem;
+  }
+
+  .client-row-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .settings-stack {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid color-mix(in oklch, oklch(var(--bc)) 12%, transparent);
+  }
+
+  .settings-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    justify-content: flex-end;
+  }
+
+  .kitchen-print-title {
+    display: none;
+    font-size: 1.2rem;
+    font-weight: 800;
   }
 
   .plan-form-actions textarea {
@@ -223,6 +278,51 @@
     font-size: 1.05rem;
   }
 
+  .driver-delivery-info {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .driver-address-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .driver-address {
+    font-weight: 800;
+  }
+
+  .driver-phone-line {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: color-mix(in oklch, oklch(var(--bc)) 76%, transparent);
+    font-size: 0.92rem;
+  }
+
+  .driver-meal {
+    display: flex;
+    width: fit-content;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.35rem 0.55rem;
+    border-radius: 0.55rem;
+    background: color-mix(in oklch, oklch(var(--p)) 16%, oklch(var(--b1)));
+    color: oklch(var(--bc));
+    font-size: 1rem;
+  }
+
+  .driver-meal strong {
+    font-weight: 900;
+  }
+
+  .driver-note {
+    min-height: 2.5rem;
+    font-size: 0.9rem;
+  }
+
   .driver-order-buttons {
     align-self: stretch;
     align-content: start;
@@ -242,12 +342,42 @@
   .delivery-actions {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, 2.5rem) auto;
     gap: 0.55rem;
+    justify-content: end;
+    align-items: center;
   }
 
   .delivery-actions .btn {
-    min-height: 3rem;
+    min-height: 2.4rem;
+  }
+
+  .status-action {
+    width: 2.4rem;
+    height: 2.4rem;
+    min-height: 2.4rem;
+    padding: 0;
+    font-size: 1.25rem;
+    font-weight: 900;
+  }
+
+  .delivery-cleanup {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem;
+    border: 1px solid color-mix(in oklch, oklch(var(--er)) 22%, oklch(var(--b3)));
+    border-radius: 0.65rem;
+    background: color-mix(in oklch, oklch(var(--er)) 8%, oklch(var(--b1)));
+    font-size: 0.9rem;
+  }
+
+  .region-assign-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    justify-content: flex-end;
   }
 
   .status-badge {
@@ -262,7 +392,7 @@
 
     .delivery-actions {
       grid-column: auto;
-      grid-template-columns: repeat(2, minmax(9rem, 1fr));
+      grid-template-columns: repeat(3, 2.5rem) auto;
     }
   }
 
@@ -281,12 +411,36 @@
     }
 
     .delivery-actions {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(3, 2.25rem) minmax(0, auto);
+      gap: 0.4rem;
     }
 
     .delivery-actions .btn {
-      min-height: 3.25rem;
-      font-size: 0.95rem;
+      min-height: 2.2rem;
+      padding-inline: 0.45rem;
+      font-size: 0.78rem;
+    }
+
+    .delivery-actions .status-action {
+      width: 2.25rem;
+      height: 2.25rem;
+      min-height: 2.25rem;
+      padding: 0;
+      font-size: 1.1rem;
+    }
+
+    .driver-address-line {
+      align-items: flex-start;
+    }
+
+    .settings-row {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .settings-actions,
+    .region-assign-controls {
+      justify-content: flex-start;
     }
 
     .mini-order {
@@ -316,17 +470,63 @@
     }
 
     .weekday-row {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
     .weekday-row label,
     .plan-toggle {
       justify-content: flex-start;
-      padding: 0 0.75rem;
+      min-height: 2.15rem;
+      padding: 0 0.5rem;
     }
 
     .plan-form-actions .btn {
       width: 100%;
+    }
+  }
+
+  @media print {
+    body {
+      background: white !important;
+      color: black !important;
+    }
+
+    header,
+    nav,
+    #dashboard,
+    #clients,
+    #orders,
+    #driver,
+    #settings,
+    #kitchen .card-title,
+    #kitchenDate,
+    #printKitchen {
+      display: none !important;
+    }
+
+    #appShell,
+    #kitchen,
+    #kitchenReport,
+    .view.active {
+      display: block !important;
+    }
+
+    main,
+    .card-body {
+      padding: 0 !important;
+    }
+
+    .kitchen-print-title {
+      display: block !important;
+      margin-bottom: 1rem;
+    }
+
+    #kitchen .card,
+    #kitchen .app-card,
+    #kitchen article {
+      border: 0 !important;
+      box-shadow: none !important;
+      background: white !important;
     }
   }
 }

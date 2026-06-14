@@ -14,7 +14,7 @@
           <input name="username" class="input input-bordered" placeholder="Login" autocomplete="username" required />
           <input name="password" type="password" class="input input-bordered" placeholder="Hasło" autocomplete="current-password" required />
           <button class="btn btn-primary action-main" type="submit">Zaloguj</button>
-          <p id="loginMessage" class="text-sm opacity-70">admin / admin123 albo kierowca1 / kierowca123</p>
+          <p id="loginMessage" class="text-sm opacity-70"></p>
         </div>
       </form>
     </div>
@@ -38,7 +38,7 @@
         <button class="tab admin-only" data-view="clients">Klienci</button>
         <button class="tab admin-only" data-view="orders">Plany</button>
         <button class="tab admin-only" data-view="kitchen">Kuchnia</button>
-        <button class="tab" data-view="driver">Kierowca</button>
+        <button class="tab" data-view="driver">Dostawy</button>
         <button class="tab admin-only" data-view="settings">Ustawienia</button>
       </nav>
 
@@ -61,15 +61,23 @@
         <section class="view" id="clients">
           <div class="card app-card bg-base-100 shadow mb-4">
             <div class="card-body">
-              <h2 class="card-title">Dodaj klienta</h2>
+              <h2 id="clientFormTitle" class="card-title">Dodaj klienta</h2>
               <form id="clientForm" class="grid gap-3 md:grid-cols-3">
+                <input name="id" type="hidden" />
                 <input name="name" class="input input-bordered" placeholder="Imię i nazwisko lub firma" required />
                 <input name="phone" class="input input-bordered" placeholder="Telefon" />
                 <input name="address" class="input input-bordered" placeholder="Adres dostawy" required />
                 <select name="region_id" id="clientRegion" class="select select-bordered"></select>
                 <select name="driver_id" id="clientDriver" class="select select-bordered"></select>
+                <select name="active" class="select select-bordered">
+                  <option value="true">Aktywny</option>
+                  <option value="false">Nieaktywny</option>
+                </select>
                 <textarea name="notes" class="textarea textarea-bordered md:col-span-2" placeholder="Uwagi"></textarea>
-                <button class="btn btn-primary action-main" type="submit">Dodaj klienta</button>
+                <div class="flex gap-2">
+                  <button id="clientSubmitButton" class="btn btn-primary action-main" type="submit">Dodaj klienta</button>
+                  <button id="clientCancelEdit" class="btn btn-outline hidden" type="button">Anuluj</button>
+                </div>
               </form>
             </div>
           </div>
@@ -154,20 +162,28 @@
                       <span class="label-text">Daty nieregularne</span>
                       <input name="custom_dates" class="input input-bordered" placeholder="2026-06-12, 2026-06-18" />
                     </label>
+                    <label class="form-control custom-dates-control">
+                      <span class="label-text">Dni bez obiadu / wyjątki</span>
+                      <input name="excluded_dates" class="input input-bordered" placeholder="2026-06-14, 2026-06-21" />
+                    </label>
                   </div>
                 </section>
 
                 <section class="plan-form-section compact">
                   <div class="plan-section-title"><span>3</span><strong>Uwagi i zapis</strong></div>
                   <div class="plan-form-actions">
+                    <input name="id" type="hidden" />
                     <textarea name="notes" class="textarea textarea-bordered" placeholder="Uwagi dla biura, kuchni lub kierowcy"></textarea>
-                    <button class="btn btn-primary action-main" type="submit">Dodaj plan</button>
+                    <div class="flex gap-2">
+                      <button id="orderSubmitButton" class="btn btn-primary action-main" type="submit">Dodaj plan</button>
+                      <button id="orderCancelEdit" class="btn btn-outline hidden" type="button">Anuluj</button>
+                    </div>
                   </div>
                 </section>
               </form>
             </div>
           </div>
-          <div class="card app-card bg-base-100 shadow"><div class="card-body"><h2 class="card-title">Plany</h2><div id="ordersList" class="grid gap-3"></div></div></div>
+          <div class="card app-card bg-base-100 shadow"><div class="card-body"><div class="flex flex-col md:flex-row gap-2 md:items-center md:justify-between"><h2 class="card-title">Plany</h2><input id="orderSearch" class="input input-bordered input-sm" placeholder="Szukaj po kliencie" /></div><div id="ordersList" class="grid gap-3"></div></div></div>
         </section>
 
         <section class="view" id="kitchen">
@@ -175,6 +191,7 @@
             <div class="card-body">
               <div class="flex flex-wrap gap-2 justify-between">
                 <h2 class="card-title">Raport kuchni</h2>
+                <h2 class="kitchen-print-title">Raport kuchni - <span id="kitchenPrintDate"></span></h2>
                 <div class="flex gap-2"><input id="kitchenDate" type="date" class="input input-bordered input-sm" /><button id="printKitchen" class="btn btn-sm btn-outline">Drukuj</button></div>
               </div>
               <div id="kitchenReport" class="grid gap-3"></div>
@@ -186,12 +203,17 @@
           <div class="card app-card driver-panel bg-base-100 shadow">
             <div class="card-body">
               <div class="flex flex-wrap gap-2 items-center justify-between">
-                <h2 class="card-title">Lista kierowcy</h2>
+                <h2 class="card-title">Lista dostaw</h2>
                 <div class="flex flex-wrap gap-2">
                   <select id="driverSelect" class="select select-bordered select-sm admin-only"></select>
                   <input id="driverDate" type="date" class="input input-bordered input-sm" />
                   <span id="driverDeliveryCount" class="badge badge-primary">0 dostaw</span>
                 </div>
+              </div>
+              <div class="admin-only delivery-cleanup">
+                <span>Usuń historię dostaw do dnia</span>
+                <input id="cleanupDate" type="date" class="input input-bordered input-sm" />
+                <button id="cleanupDeliveries" class="btn btn-error btn-outline btn-sm">Usuń historię</button>
               </div>
               <div id="driverList" class="grid gap-3"></div>
             </div>
@@ -199,9 +221,10 @@
         </section>
 
         <section class="view" id="settings">
-          <div class="grid gap-4 md:grid-cols-3">
+          <div class="settings-stack">
             <div class="card app-card bg-base-100 shadow"><div class="card-body"><h2 class="card-title">Rejony</h2><form id="regionForm" class="settings-inline-form"><input name="name" class="input input-bordered" placeholder="Rejon" required /><button class="btn btn-primary">Dodaj</button></form><div id="regionsList" class="grid gap-2"></div></div></div>
-            <div class="card app-card bg-base-100 shadow"><div class="card-body"><h2 class="card-title">Kierowcy</h2><form id="driverForm" class="grid gap-2"><input name="name" class="input input-bordered" placeholder="Imię" required /><input name="phone" class="input input-bordered" placeholder="Telefon" /><button class="btn btn-primary">Dodaj</button></form><div id="driversList" class="grid gap-2"></div></div></div>
+            <div class="card app-card bg-base-100 shadow"><div class="card-body"><h2 id="driverFormTitle" class="card-title">Kierowcy</h2><form id="driverForm" class="grid gap-2 md:grid-cols-2"><input name="driver_id" type="hidden" /><input name="user_id" type="hidden" /><input name="name" class="input input-bordered" placeholder="Imię kierowcy" required /><input name="phone" class="input input-bordered" placeholder="Telefon" /><input name="username" class="input input-bordered" placeholder="Login" required /><input name="password" class="input input-bordered" placeholder="Hasło / nowe hasło" /><div class="flex gap-2"><button id="driverSubmitButton" class="btn btn-primary">Dodaj kierowcę</button><button id="driverCancelEdit" class="btn btn-outline hidden" type="button">Anuluj</button></div></form><div id="driversList" class="grid gap-2"></div></div></div>
+            <div class="card app-card bg-base-100 shadow"><div class="card-body"><h2 class="card-title">Hasło administratora</h2><form id="adminPasswordForm" class="grid gap-2 md:grid-cols-3"><input name="current_password" type="password" class="input input-bordered" placeholder="Obecne hasło" autocomplete="current-password" required /><input name="new_password" type="password" class="input input-bordered" placeholder="Nowe hasło" autocomplete="new-password" required /><input name="repeat_password" type="password" class="input input-bordered" placeholder="Powtórz nowe hasło" autocomplete="new-password" required /><button class="btn btn-primary">Zmień hasło</button></form><p id="adminPasswordMessage" class="text-sm opacity-70"></p></div></div>
             <div class="card app-card bg-base-100 shadow"><div class="card-body"><h2 class="card-title">Katalog</h2><form id="catalogForm" class="grid gap-2"><input name="category" class="input input-bordered" placeholder="Nowa kategoria" /><select name="category_id" id="catalogCategory" class="select select-bordered"></select><input name="meal" class="input input-bordered" placeholder="Nowa pozycja" /><button class="btn btn-primary">Zapisz</button></form><div id="catalogList" class="grid gap-2"></div></div></div>
           </div>
         </section>

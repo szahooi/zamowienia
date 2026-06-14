@@ -43,6 +43,10 @@ function nameOf(rows, rowId, fallback) {
   return byId(rows, rowId)?.name || fallback;
 }
 
+function userForDriver(driverId) {
+  return state.users?.find((user) => user.role === "driver" && user.driver_id === Number(driverId));
+}
+
 function isAdmin() {
   return state?.current_user?.role === "admin";
 }
@@ -59,6 +63,10 @@ function removed(dateText, orderId) {
   return state.removed.some((row) => row.date === dateText && row.order_id === orderId);
 }
 
+function driverNoteFor(driverId, clientId) {
+  return state.driver_notes?.find((row) => row.driver_id === driverId && row.client_id === clientId)?.note || "";
+}
+
 function defaultClientOrder(driverId) {
   return state.default_order
     .filter((row) => row.driver_id === driverId)
@@ -67,6 +75,7 @@ function defaultClientOrder(driverId) {
 }
 
 function appliesOn(order, dateText) {
+  if ((order.excluded_dates || []).includes(dateText)) return false;
   const date = new Date(`${dateText}T12:00:00`);
   const weekday = date.getDay();
   const inRange = dateText >= order.start_date && dateText <= order.end_date;
@@ -74,7 +83,7 @@ function appliesOn(order, dateText) {
   const interval = Number(order.interval_days || 0);
   const matchesRegular = inRange && order.days.includes(weekday);
   const matchesInterval = inRange && interval > 1 && daysFromStart % interval === 0;
-  const matchesCustom = order.custom_dates.includes(dateText);
+  const matchesCustom = (order.custom_dates || []).includes(dateText);
   return interval > 1 ? matchesInterval || matchesCustom : matchesRegular || matchesCustom;
 }
 
@@ -95,12 +104,14 @@ function empty() {
 }
 
 function renderSelects() {
+  const selectedDriver = $("#driverSelect")?.value;
   const regionOptions = state.regions.map((region) => `<option value="${region.id}">${region.name}</option>`).join("");
   const driverOptions = state.drivers.map((driver) => `<option value="${driver.id}">${driver.name}${driver.phone ? ` - ${driver.phone}` : ""}</option>`).join("");
   $("#clientRegion").innerHTML = regionOptions;
   $("#clientRegionFilter").innerHTML = `<option value="all">Wszystkie rejony</option>${regionOptions}`;
   $("#clientDriver").innerHTML = driverOptions;
   $("#driverSelect").innerHTML = driverOptions;
+  if (selectedDriver && state.drivers.some((driver) => String(driver.id) === selectedDriver)) $("#driverSelect").value = selectedDriver;
   $("#orderClient").innerHTML = state.clients.filter((client) => client.active).map((client) => `<option value="${client.id}">${client.name}</option>`).join("");
   $("#orderCategory").innerHTML = state.categories.map((category) => `<option value="${category.id}">${category.name}</option>`).join("");
   $("#catalogCategory").innerHTML = state.categories.map((category) => `<option value="${category.id}">${category.name}</option>`).join("");
@@ -110,6 +121,11 @@ function renderSelects() {
 function renderMealSelect() {
   const categoryId = id($("#orderCategory").value || state.categories[0]?.id);
   $("#orderMeal").innerHTML = state.meals.filter((meal) => meal.category_id === categoryId).map((meal) => `<option value="${meal.id}">${meal.name}</option>`).join("");
+}
+
+function syncClientDriverToRegion() {
+  const region = byId(state.regions, $("#clientRegion").value);
+  if (region?.driver_id) $("#clientDriver").value = region.driver_id;
 }
 
 function renderAccess() {
@@ -147,18 +163,21 @@ function renderClients() {
       return a.name.localeCompare(b.name, "pl");
     });
   $("#clientsList").innerHTML = clients.length ? clients.map((client) => `
-    <article class="card app-card bg-base-100 border">
-      <div class="card-body">
-        <div class="flex justify-between gap-2">
-          <div><strong>${client.name}</strong><div class="text-sm opacity-70">${client.address}<br>${client.phone || "Brak telefonu"}</div></div>
-          <span class="badge ${client.active ? "badge-success" : "badge-error"}">${client.active ? "Aktywny" : "Nieaktywny"}</span>
-        </div>
-        <div class="text-sm opacity-70">Rejon: ${nameOf(state.regions, client.region_id, "-")} · Kierowca: ${nameOf(state.drivers, client.driver_id, "-")}</div>
-        ${client.notes ? `<div class="text-sm">${client.notes}</div>` : ""}
-        <div class="flex flex-wrap gap-2">
-          <button class="btn btn-outline btn-sm" data-toggle-client="${client.id}">${client.active ? "Oznacz jako nieaktywnego" : "Przywróć"}</button>
-          <button class="btn btn-error btn-outline btn-sm" data-delete-client="${client.id}">Usuń</button>
-        </div>
+    <article class="client-row bg-base-100 border">
+      <div class="client-row-main">
+        <div><strong>${client.name}</strong><div class="text-sm opacity-70">${client.address}</div></div>
+        <span class="badge ${client.active ? "badge-success" : "badge-error"}">${client.active ? "Aktywny" : "Nieaktywny"}</span>
+      </div>
+      <div class="client-row-meta">
+        <span>${client.phone || "Brak telefonu"}</span>
+        <span>Rejon: ${nameOf(state.regions, client.region_id, "-")}</span>
+        <span>Kierowca: ${nameOf(state.drivers, client.driver_id, "-")}</span>
+      </div>
+      ${client.notes ? `<div class="text-sm">${client.notes}</div>` : ""}
+      <div class="client-row-actions">
+        <button class="btn btn-outline btn-sm" data-edit-client="${client.id}">Edytuj</button>
+        <button class="btn btn-outline btn-sm" data-toggle-client="${client.id}">${client.active ? "Nieaktywny" : "Przywróć"}</button>
+        <button class="btn btn-error btn-outline btn-sm" data-delete-client="${client.id}">Usuń</button>
       </div>
     </article>
   `).join("") : empty();
@@ -191,11 +210,18 @@ function renderKitchenInto(selector, dateText) {
 }
 
 function renderKitchen() {
-  renderKitchenInto("#kitchenReport", $("#kitchenDate").value);
+  const dateText = $("#kitchenDate").value;
+  $("#kitchenPrintDate").textContent = dateText;
+  renderKitchenInto("#kitchenReport", dateText);
 }
 
 function renderOrders() {
-  $("#ordersList").innerHTML = state.orders.length ? state.orders.map((order) => {
+  const search = ($("#orderSearch")?.value || "").trim().toLowerCase();
+  const orders = state.orders.filter((order) => {
+    const client = clientById(order.client_id);
+    return !search || (client?.name || "").toLowerCase().includes(search);
+  });
+  $("#ordersList").innerHTML = orders.length ? orders.map((order) => {
     const client = clientById(order.client_id);
     const days = Number(order.interval_days || 0) > 1 ? `co ${order.interval_days} dzień` : order.days.length ? order.days.map((day) => ["Nd", "Pon", "Wt", "Śr", "Czw", "Pt", "Sob"][day]).join(", ") : "daty wybrane";
     return `
@@ -206,10 +232,13 @@ function renderOrders() {
         </div>
         <div class="plan-dates">
           <span>${order.start_date} - ${order.end_date}</span>
-          <small>${days}${order.custom_dates.length ? ` · Daty: ${order.custom_dates.join(", ")}` : ""}</small>
+          <small>${days}${order.custom_dates.length ? ` · Daty: ${order.custom_dates.join(", ")}` : ""}${(order.excluded_dates || []).length ? ` · Bez obiadu: ${order.excluded_dates.join(", ")}` : ""}</small>
         </div>
         ${order.notes ? `<div class="plan-notes">${order.notes}</div>` : ""}
-        <div><button class="btn btn-error btn-outline btn-sm compact-delete" data-delete-order="${order.id}">Usuń</button></div>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn btn-outline btn-sm" data-edit-order="${order.id}">Edytuj</button>
+          <button class="btn btn-error btn-outline btn-sm compact-delete" data-delete-order="${order.id}">Usuń</button>
+        </div>
       </div></article>
     `;
   }).join("") : empty();
@@ -236,22 +265,32 @@ function renderDriver() {
   $("#driverDeliveryCount").textContent = `${entries.length} ${deliveryWord(entries.length)}`;
   $("#driverList").innerHTML = entries.length ? entries.map(({ order, client }, index) => {
     const status = statusFor(dateText, order.id);
+    const phoneHref = (client.phone || "").replace(/[^\d+]/g, "");
+    const note = driverNoteFor(driverId, client.id);
     return `
       <article class="delivery card driver-card bg-base-100 border p-3" draggable="true" data-order-id="${order.id}">
         <div class="driver-order-buttons grid gap-1">
           <button class="mini-order" data-move-delivery="${order.id}" data-move-direction="up">↑</button>
           <button class="mini-order" data-move-delivery="${order.id}" data-move-direction="down">↓</button>
         </div>
-        <div>
+        <div class="driver-delivery-info">
           <div class="flex justify-between gap-2"><strong class="driver-name">${index + 1}. ${client.name}</strong><span class="badge status-badge ${statusClass(status)}">${status}</span></div>
-          <div class="text-sm opacity-70">${client.address}<br>${client.phone || "Brak telefonu"} · ${nameOf(state.meals, order.meal_id, "-")} x ${order.quantity}</div>
+          <div class="driver-address-line">
+            <span class="driver-address">${client.address}</span>
+            <button class="btn btn-xs btn-outline action-map" data-map="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(client.address)}">Mapa</button>
+          </div>
+          <div class="driver-phone-line">
+            <span>${client.phone || "Brak telefonu"}</span>
+            ${phoneHref ? `<a class="btn btn-xs btn-outline" href="tel:${phoneHref}">Dzwoń</a>` : ""}
+          </div>
+          <div class="driver-meal"><strong>${nameOf(state.meals, order.meal_id, "-")}</strong><span>x ${order.quantity}</span></div>
           ${(client.notes || order.notes) ? `<div class="text-sm">${[client.notes, order.notes].filter(Boolean).join(" · ")}</div>` : ""}
+          <textarea class="textarea textarea-bordered driver-note" data-driver-note-client="${client.id}" placeholder="Notatka kierowcy">${note}</textarea>
         </div>
         <div class="delivery-actions">
-          <button class="btn btn-outline action-map" data-map="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(client.address)}">Mapa</button>
-          <button class="btn ${status === "Do dostarczenia" ? "btn-primary" : "btn-outline"}" data-set-status="${order.id}" data-status-value="Do dostarczenia">Do dostarczenia</button>
-          <button class="btn ${status === "Dostarczone" ? "btn-success" : "btn-outline"}" data-set-status="${order.id}" data-status-value="Dostarczone">Dostarczone</button>
-          <button class="btn ${status === "Anulowane" ? "btn-error" : "btn-outline"}" data-set-status="${order.id}" data-status-value="Anulowane">Anulowane</button>
+          <button class="btn status-action ${status === "Do dostarczenia" ? "btn-warning" : "btn-outline"}" title="Do dostarczenia" data-set-status="${order.id}" data-status-value="Do dostarczenia">○</button>
+          <button class="btn status-action ${status === "Dostarczone" ? "btn-success" : "btn-outline"}" title="Dostarczone" data-set-status="${order.id}" data-status-value="Dostarczone">✓</button>
+          <button class="btn status-action ${status === "Anulowane" ? "btn-error" : "btn-outline"}" title="Anulowane" data-set-status="${order.id}" data-status-value="Anulowane">×</button>
           ${isAdmin() && status !== "Do dostarczenia" ? `<button class="btn btn-error btn-outline" data-remove-delivery="${order.id}">Usuń</button>` : ""}
         </div>
       </article>
@@ -260,8 +299,31 @@ function renderDriver() {
 }
 
 function renderSettings() {
-  $("#regionsList").innerHTML = state.regions.map((region) => `<div class="badge">${region.name}</div>`).join("");
-  $("#driversList").innerHTML = state.drivers.map((driver) => `<div class="badge">${driver.name}</div>`).join("");
+  $("#regionsList").innerHTML = state.regions.map((region) => `
+    <div class="settings-row region-assign-row">
+      <span><strong>${region.name}</strong></span>
+      <div class="region-assign-controls">
+        <select class="select select-bordered select-sm" data-region-driver="${region.id}">
+          ${state.drivers.map((driver) => `<option value="${driver.id}" ${driver.id === (region.driver_id || state.drivers[0]?.id) ? "selected" : ""}>${driver.name}</option>`).join("")}
+        </select>
+        <button class="btn btn-xs btn-outline" data-assign-region="${region.id}">Przypisz kierowcę</button>
+        <button class="btn btn-xs btn-outline" data-edit-region="${region.id}">Edytuj</button>
+        <button class="btn btn-xs btn-error btn-outline" data-delete-region="${region.id}">Usuń</button>
+      </div>
+    </div>
+  `).join("");
+  $("#driversList").innerHTML = state.drivers.map((driver) => {
+    const user = userForDriver(driver.id);
+    return `
+      <div class="settings-row">
+        <span><strong>${driver.name}</strong>${driver.phone ? ` · ${driver.phone}` : ""} · login: ${user?.username || "brak"}</span>
+        <div class="settings-actions">
+          <button class="btn btn-xs btn-outline" data-edit-driver="${driver.id}">Edytuj</button>
+          <button class="btn btn-xs btn-error btn-outline" data-delete-driver="${driver.id}">Usuń</button>
+        </div>
+      </div>
+    `;
+  }).join("");
   $("#catalogList").innerHTML = state.categories.map((category) => `<div><strong>${category.name}</strong><br><span class="text-sm opacity-70">${state.meals.filter((meal) => meal.category_id === category.id).map((meal) => meal.name).join(" · ")}</span></div>`).join("");
 }
 
@@ -302,6 +364,23 @@ function customDates(value) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function orderPayload(form) {
+  const data = new FormData(form);
+  return {
+    client_id: id(data.get("client_id")),
+    category_id: id(data.get("category_id")),
+    meal_id: id(data.get("meal_id")),
+    start_date: data.get("start_date"),
+    end_date: data.get("end_date"),
+    days: data.getAll("days").map(Number),
+    interval_days: data.get("every_other_day") ? 2 : 0,
+    custom_dates: customDates(data.get("custom_dates") || ""),
+    excluded_dates: customDates(data.get("excluded_dates") || ""),
+    quantity: Number(data.get("quantity") || 1),
+    notes: data.get("notes") || ""
+  };
+}
+
 async function saveDefaultOrder(orderId, direction) {
   const driverId = activeDriverId();
   const dateText = $("#driverDate").value;
@@ -325,8 +404,38 @@ function setDefaults() {
   const today = new Date();
   $("#kitchenDate").value = iso(addDays(today, 1));
   $("#driverDate").value = iso(today);
+  $("#cleanupDate").value = iso(today);
   $("#orderForm [name='start_date']").value = iso(today);
   $("#orderForm [name='end_date']").value = iso(addDays(today, 30));
+}
+
+function resetClientForm() {
+  $("#clientForm").reset();
+  $("#clientForm [name='id']").value = "";
+  $("#clientForm [name='active']").value = "true";
+  $("#clientFormTitle").textContent = "Dodaj klienta";
+  $("#clientSubmitButton").textContent = "Dodaj klienta";
+  $("#clientCancelEdit").classList.add("hidden");
+}
+
+function resetOrderForm() {
+  $("#orderForm").reset();
+  $("#orderForm [name='id']").value = "";
+  $$(`#orderForm [name='days']`).forEach((box) => {
+    box.checked = ["1", "2", "3", "4", "5"].includes(box.value);
+  });
+  setDefaults();
+  $("#orderSubmitButton").textContent = "Dodaj plan";
+  $("#orderCancelEdit").classList.add("hidden");
+}
+
+function resetDriverForm() {
+  $("#driverForm").reset();
+  $("#driverForm [name='driver_id']").value = "";
+  $("#driverForm [name='user_id']").value = "";
+  $("#driverFormTitle").textContent = "Kierowcy";
+  $("#driverSubmitButton").textContent = "Dodaj kierowcę";
+  $("#driverCancelEdit").classList.add("hidden");
 }
 
 function bindEvents() {
@@ -346,41 +455,44 @@ function bindEvents() {
     $("#appShell").classList.add("hidden");
   });
   $("#orderCategory").addEventListener("change", renderMealSelect);
+  $("#clientRegion").addEventListener("change", syncClientDriverToRegion);
   $("#clientSearch").addEventListener("input", renderClients);
   $("#clientRegionFilter").addEventListener("change", renderClients);
   $("#clientStatusFilter").addEventListener("change", renderClients);
   $("#clientSort").addEventListener("change", renderClients);
+  $("#orderSearch").addEventListener("input", renderOrders);
   $("#kitchenDate").addEventListener("change", renderKitchen);
   $("#driverSelect").addEventListener("change", renderDriver);
   $("#driverDate").addEventListener("change", renderDriver);
   $("#printKitchen").addEventListener("click", () => window.print());
+  $("#clientCancelEdit").addEventListener("click", resetClientForm);
+  $("#orderCancelEdit").addEventListener("click", resetOrderForm);
+  $("#driverCancelEdit").addEventListener("click", resetDriverForm);
+  $("#cleanupDeliveries").addEventListener("click", async () => {
+    const dateTo = $("#cleanupDate").value;
+    if (!dateTo) return;
+    if (!confirm(`Usunąć historię dostaw do dnia ${dateTo}?`)) return;
+    await api("/api/delivery-history/cleanup", { method: "POST", body: JSON.stringify({ date_to: dateTo }) });
+    await loadState();
+  });
 
   $("#clientForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    await api("/api/clients", { method: "POST", body: JSON.stringify(formData(event.currentTarget)) });
-    event.currentTarget.reset();
+    const payload = formData(event.currentTarget);
+    payload.region_id = id(payload.region_id);
+    payload.driver_id = id(payload.driver_id);
+    payload.active = payload.active === "true";
+    const clientId = payload.id;
+    delete payload.id;
+    await api(clientId ? `/api/clients/${clientId}` : "/api/clients", { method: clientId ? "PUT" : "POST", body: JSON.stringify(payload) });
+    resetClientForm();
     await loadState();
   });
   $("#orderForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    await api("/api/orders", {
-      method: "POST",
-      body: JSON.stringify({
-        client_id: id(data.get("client_id")),
-        category_id: id(data.get("category_id")),
-        meal_id: id(data.get("meal_id")),
-        start_date: data.get("start_date"),
-        end_date: data.get("end_date"),
-        days: data.getAll("days").map(Number),
-        interval_days: data.get("every_other_day") ? 2 : 0,
-        custom_dates: customDates(data.get("custom_dates") || ""),
-        quantity: Number(data.get("quantity") || 1),
-        notes: data.get("notes") || ""
-      })
-    });
-    event.currentTarget.reset();
-    setDefaults();
+    const orderId = event.currentTarget.elements.id.value;
+    await api(orderId ? `/api/orders/${orderId}` : "/api/orders", { method: orderId ? "PUT" : "POST", body: JSON.stringify(orderPayload(event.currentTarget)) });
+    resetOrderForm();
     await loadState();
   });
   $("#regionForm").addEventListener("submit", async (event) => {
@@ -391,9 +503,32 @@ function bindEvents() {
   });
   $("#driverForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    await api("/api/drivers", { method: "POST", body: JSON.stringify(formData(event.currentTarget)) });
-    event.currentTarget.reset();
+    const payload = formData(event.currentTarget);
+    const driverId = payload.driver_id;
+    delete payload.driver_id;
+    delete payload.user_id;
+    if (!driverId && !payload.password) {
+      alert("Podaj hasło dla nowego kierowcy.");
+      return;
+    }
+    await api(driverId ? `/api/drivers/${driverId}` : "/api/drivers", { method: driverId ? "PUT" : "POST", body: JSON.stringify(payload) });
+    resetDriverForm();
     await loadState();
+  });
+  $("#adminPasswordForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = formData(event.currentTarget);
+    if (payload.new_password !== payload.repeat_password) {
+      $("#adminPasswordMessage").textContent = "Nowe hasła nie są takie same.";
+      return;
+    }
+    try {
+      await api("/api/admin-password", { method: "POST", body: JSON.stringify(payload) });
+      event.currentTarget.reset();
+      $("#adminPasswordMessage").textContent = "Hasło administratora zostało zmienione.";
+    } catch (error) {
+      $("#adminPasswordMessage").textContent = error.message;
+    }
   });
   $("#catalogForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -406,6 +541,94 @@ function bindEvents() {
     const target = event.target;
     if (target.dataset?.map) window.open(target.dataset.map, "_blank", "noopener");
     if (target.dataset?.moveDelivery) await saveDefaultOrder(target.dataset.moveDelivery, target.dataset.moveDirection);
+    if (target.dataset?.assignRegion) {
+      const regionId = target.dataset.assignRegion;
+      const driverId = document.querySelector(`[data-region-driver="${regionId}"]`).value;
+      await api(`/api/regions/${regionId}/assign-driver`, { method: "POST", body: JSON.stringify({ driver_id: id(driverId) }) });
+      await loadState();
+    }
+    if (target.dataset?.editRegion) {
+      const region = byId(state.regions, target.dataset.editRegion);
+      const name = prompt("Nazwa rejonu", region.name);
+      if (name === null) return;
+      try {
+        await api(`/api/regions/${region.id}`, { method: "PUT", body: JSON.stringify({ name }) });
+        await loadState();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+    if (target.dataset?.deleteRegion) {
+      const region = byId(state.regions, target.dataset.deleteRegion);
+      if (!confirm(`Usunąć rejon "${region.name}"?`)) return;
+      try {
+        await api(`/api/regions/${region.id}`, { method: "DELETE" });
+        await loadState();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+    if (target.dataset?.editClient) {
+      const client = byId(state.clients, target.dataset.editClient);
+      const form = $("#clientForm");
+      form.elements.id.value = client.id;
+      form.elements.name.value = client.name;
+      form.elements.phone.value = client.phone;
+      form.elements.address.value = client.address;
+      form.elements.region_id.value = client.region_id;
+      form.elements.driver_id.value = client.driver_id;
+      form.elements.active.value = String(client.active);
+      form.elements.notes.value = client.notes;
+      $("#clientFormTitle").textContent = "Edytuj klienta";
+      $("#clientSubmitButton").textContent = "Zapisz zmiany";
+      $("#clientCancelEdit").classList.remove("hidden");
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    if (target.dataset?.editOrder) {
+      const order = byId(state.orders, target.dataset.editOrder);
+      const form = $("#orderForm");
+      form.elements.id.value = order.id;
+      form.elements.client_id.value = order.client_id;
+      form.elements.category_id.value = order.category_id;
+      renderMealSelect();
+      form.elements.meal_id.value = order.meal_id;
+      form.elements.start_date.value = order.start_date;
+      form.elements.end_date.value = order.end_date;
+      form.elements.quantity.value = order.quantity;
+      form.elements.every_other_day.checked = Number(order.interval_days || 0) > 1;
+      $$(`#orderForm [name='days']`).forEach((box) => { box.checked = order.days.includes(Number(box.value)); });
+      form.elements.custom_dates.value = (order.custom_dates || []).join(", ");
+      form.elements.excluded_dates.value = (order.excluded_dates || []).join(", ");
+      form.elements.notes.value = order.notes;
+      $("#orderSubmitButton").textContent = "Zapisz plan";
+      $("#orderCancelEdit").classList.remove("hidden");
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    if (target.dataset?.editDriver) {
+      const driver = byId(state.drivers, target.dataset.editDriver);
+      const user = userForDriver(driver.id);
+      const form = $("#driverForm");
+      form.elements.driver_id.value = driver.id;
+      form.elements.user_id.value = user?.id || "";
+      form.elements.name.value = driver.name;
+      form.elements.phone.value = driver.phone || "";
+      form.elements.username.value = user?.username || "";
+      form.elements.password.value = "";
+      $("#driverFormTitle").textContent = "Edytuj kierowcę";
+      $("#driverSubmitButton").textContent = "Zapisz kierowcę";
+      $("#driverCancelEdit").classList.remove("hidden");
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    if (target.dataset?.deleteDriver) {
+      const driver = byId(state.drivers, target.dataset.deleteDriver);
+      if (!confirm(`Usunąć kierowcę "${driver.name}" razem z jego kontem logowania?`)) return;
+      try {
+        await api(`/api/drivers/${driver.id}`, { method: "DELETE" });
+        await loadState();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
     if (target.dataset?.setStatus) {
       await api("/api/delivery-status", { method: "POST", body: JSON.stringify({ date: $("#driverDate").value, order_id: id(target.dataset.setStatus), status: target.dataset.statusValue }) });
       await loadState();
@@ -425,6 +648,18 @@ function bindEvents() {
     if (target.dataset?.deleteOrder) {
       await api(`/api/orders/${target.dataset.deleteOrder}`, { method: "DELETE" });
       await loadState();
+    }
+  });
+
+  document.body.addEventListener("change", async (event) => {
+    const target = event.target;
+    if (target.dataset?.driverNoteClient) {
+      await api("/api/driver-notes", {
+        method: "POST",
+        body: JSON.stringify({ driver_id: activeDriverId(), client_id: id(target.dataset.driverNoteClient), note: target.value })
+      });
+      state.driver_notes = state.driver_notes.filter((row) => !(row.driver_id === activeDriverId() && row.client_id === id(target.dataset.driverNoteClient)));
+      state.driver_notes.push({ driver_id: activeDriverId(), client_id: id(target.dataset.driverNoteClient), note: target.value });
     }
   });
 }
