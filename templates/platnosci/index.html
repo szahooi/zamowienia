@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kalkulator zamówień i płatności</title>
+  <style>
+    :root { --bg:#f5f7f3; --panel:#fff; --ink:#1f2722; --muted:#627066; --line:#d8ded7; --accent:#0f766e; --paid:#147445; --wait:#b45309; --bad:#b42318; --shadow:0 12px 34px rgba(34,42,37,.08); font-family: Inter, system-ui, "Segoe UI", sans-serif; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); }
+    button,input,select { font:inherit; }
+    button { border:0; border-radius:7px; min-height:40px; padding:0 13px; background:var(--accent); color:white; font-weight:750; cursor:pointer; }
+    button.secondary { background:#eef3f0; color:var(--ink); border:1px solid var(--line); }
+    button.ghost { background:transparent; color:var(--accent); border:1px solid var(--line); }
+    button.danger { background:#fee4e2; color:var(--bad); border:1px solid #f4b5b0; }
+    input,select { width:100%; min-height:40px; border:1px solid var(--line); border-radius:7px; padding:8px 10px; background:white; color:var(--ink); }
+    label { display:grid; gap:6px; color:var(--muted); font-size:13px; font-weight:700; }
+    header { position:sticky; top:0; z-index:2; background:rgba(245,247,243,.94); border-bottom:1px solid var(--line); backdrop-filter:blur(10px); }
+    .topbar { max-width:1280px; margin:0 auto; padding:14px 18px; display:flex; gap:14px; justify-content:space-between; align-items:center; }
+    h1 { margin:0; font-size:clamp(20px,3vw,28px); }
+    h2 { margin:0 0 14px; font-size:18px; }
+    .tabs { display:flex; gap:8px; flex-wrap:wrap; }
+    .tab { background:white; color:var(--ink); border:1px solid var(--line); }
+    .tab.active { background:var(--accent); color:white; border-color:var(--accent); }
+    main { max-width:1280px; margin:0 auto; padding:18px; }
+    .view { display:none; }
+    .view.active { display:block; }
+    .grid { display:grid; grid-template-columns:minmax(300px,410px) minmax(0,1fr); gap:16px; align-items:start; }
+    .settings-grid { grid-template-columns:minmax(420px,1.75fr) minmax(280px,.85fr); }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); padding:16px; }
+    .stack { display:grid; gap:12px; }
+    .row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .summary { display:grid; gap:9px; margin-top:12px; }
+    .summary div { display:grid; grid-template-columns:118px 1fr; gap:8px; border-bottom:1px solid #edf1ee; padding-bottom:8px; }
+    .summary dt { color:var(--muted); font-weight:800; font-size:13px; }
+    .summary dd { margin:0; overflow-wrap:anywhere; }
+    .bill-subtitle { margin:16px 0 8px; color:var(--muted); font-size:13px; font-weight:850; text-transform:uppercase; letter-spacing:.04em; }
+    .lines { display:grid; gap:10px; }
+    .line { display:grid; grid-template-columns:1.6fr .55fr .6fr .7fr auto; gap:10px; align-items:end; border:1px solid var(--line); border-radius:8px; padding:12px; background:#fbfcfb; }
+    .amount { font-weight:850; text-align:right; padding-bottom:10px; white-space:nowrap; }
+    .total { display:flex; justify-content:space-between; align-items:center; gap:12px; border-top:1px solid var(--line); margin-top:14px; padding-top:14px; font-size:26px; font-weight:850; }
+    .actions,.toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-top:14px; }
+    .toolbar { margin:0 0 12px; }
+    .toolbar label { min-width:180px; flex:1; }
+    .notice { color:var(--muted); font-size:13px; line-height:1.45; }
+    .numbers { display:grid; grid-template-columns:repeat(4,minmax(150px,1fr)); gap:12px; margin-bottom:14px; }
+    .metric { background:white; border:1px solid var(--line); border-radius:8px; padding:13px; }
+    .metric span { display:block; color:var(--muted); font-size:12px; font-weight:800; text-transform:uppercase; }
+    .metric strong { display:block; margin-top:5px; font-size:22px; }
+    table { width:100%; border-collapse:collapse; background:white; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+    th,td { text-align:left; padding:10px; border-bottom:1px solid #edf1ee; vertical-align:middle; overflow-wrap:anywhere; }
+    th { font-size:12px; color:var(--muted); background:#f8faf8; text-transform:uppercase; letter-spacing:.04em; }
+    tr:last-child td { border-bottom:0; }
+    .status { display:inline-flex; border-radius:999px; padding:5px 10px; font-size:12px; font-weight:850; background:#eef3f0; }
+    .status.paid { color:var(--paid); background:#dff3e8; }
+    .status.wait { color:var(--wait); background:#fff0d8; }
+    .status.partial { color:#1d4ed8; background:#dbeafe; }
+    .status.bad { color:var(--bad); background:#fee4e2; }
+    .payment-actions { display:flex; gap:6px; align-items:center; white-space:nowrap; }
+    .payment-actions select { width:132px; min-height:34px; padding:6px 8px; }
+    .icon-button { width:34px; min-width:34px; min-height:34px; padding:0; font-size:18px; line-height:1; }
+    .orders-table { table-layout:fixed; }
+    .orders-table th:nth-child(1){width:24%}.orders-table th:nth-child(2){width:25%}.orders-table th:nth-child(3){width:80px}
+    .order-main { display:grid; gap:4px; min-width:0; }
+    .order-main strong { font-size:14px; overflow-wrap:anywhere; }
+    .order-meta { color:var(--muted); font-size:12px; line-height:1.35; overflow-wrap:anywhere; }
+    .order-address { line-height:1.35; overflow-wrap:anywhere; }
+    .order-portions { font-weight:850; text-align:center; white-space:nowrap; }
+    .price-row { grid-template-columns:minmax(260px,1fr) 150px auto; align-items:end; }
+    @media(max-width:900px){ .topbar{align-items:stretch;flex-direction:column}.grid,.row,.numbers,.settings-grid{grid-template-columns:1fr}.line{grid-template-columns:1fr 1fr}.amount{text-align:left;padding-bottom:0} table,thead,tbody,th,td,tr{display:block} thead{display:none} tr{border-bottom:1px solid var(--line);padding:9px 0} td{border:0;display:grid;grid-template-columns:110px 1fr;gap:8px;padding:6px 10px} td::before{content:attr(data-label);color:var(--muted);font-weight:800;font-size:12px}.order-portions{text-align:left} }
+  </style>
+</head>
+<body>
+  <header><div class="topbar"><h1>Kalkulator zamówień i płatności</h1><nav class="tabs"><button class="tab active" data-view="calculator">Kalkulator</button><button class="tab" data-view="payments">Płatności</button><button class="tab" data-view="orders">Zamówienia</button><button class="tab" data-view="settings">Cennik i import</button><button class="tab" id="paymentsLogout" type="button">Wyloguj</button></nav></div></header>
+  <main>
+    <section id="calculator" class="view active"><div class="grid">
+      <aside class="panel stack"><h2>Dane zamówienia</h2><label>Numer zamówienia<select id="orderSelect"></select></label><label>Szybkie wyszukiwanie<input id="orderSearch" type="search" placeholder="Klient, telefon, adres lub numer"></label><dl class="summary" id="orderSummary"></dl></aside>
+      <section class="panel"><h2>Rachunek</h2><p class="bill-subtitle">Pozycje z cennika</p><div class="lines" id="billLines"></div><button class="secondary" id="addBillLine" type="button">Dodaj kolejną pozycję z cennika</button><p class="bill-subtitle">Pozycje niestandardowe</p><div class="lines" id="customLines"></div><button class="secondary" id="addCustomLine" type="button">Dodaj pozycję niestandardową</button><div class="row" style="margin-top:12px"><label>Rabat<input id="discount" type="number" min="0" step="0.01" value="0"></label></div><div class="total"><span>Suma</span><output id="billTotal">0,00 zł</output></div><div class="actions"><button id="savePayment">Zaksięguj jako oczekujące</button><button class="secondary" id="printBill">Generuj rachunek PDF A5</button><button class="ghost" id="clearBill">Wyczyść rachunek</button></div><p class="notice" id="billNotice"></p></section>
+    </div></section>
+
+    <section id="payments" class="view"><div class="numbers" id="paymentMetrics"></div><div class="panel"><div class="toolbar"><label>Filtr<input id="paymentSearch" type="search" placeholder="Klient, numer zamówienia lub metoda"></label><label>Status<select id="statusFilter"><option value="">Wszystkie</option><option>Oczekuje</option><option>Częściowo</option><option>Zapłacone</option><option>Anulowane</option></select></label><label>Od<input id="paymentDateFrom" type="date"></label><label>Do<input id="paymentDateTo" type="date"></label><button class="secondary" id="printPayments">Podsumowanie PDF</button><button class="secondary" id="downloadLogs">Pobierz logi CSV</button><button class="ghost" id="clearPaymentDates">Wyczyść daty</button><button class="danger" id="deletePaidPayments">Usuń zapłacone</button></div><table><thead><tr><th>Data</th><th>Nr</th><th>Klient</th><th>Kwota</th><th>Metoda</th><th>Status</th><th>Akcje</th></tr></thead><tbody id="paymentRows"></tbody></table></div></section>
+
+    <section id="orders" class="view"><div class="panel"><div class="toolbar"><label>Szukaj w zamówieniach<input id="allOrderSearch" type="search" placeholder="Klient, adres, telefon, numer"></label></div><table class="orders-table"><thead><tr><th>Zamówienie</th><th>Klient</th><th>Porcje</th><th>Dostawa</th></tr></thead><tbody id="orderRows"></tbody></table></div></section>
+
+    <section id="settings" class="view"><div class="grid settings-grid"><section class="panel"><h2>Cennik</h2><div id="priceRows" class="stack"></div><div class="actions"><button id="addPrice" class="secondary">Dodaj pozycję</button></div></section><section class="panel stack"><h2>Import z arkusza</h2><p class="notice">Wybierz plik CSV pobrany z Google Sheets.</p><label>Plik CSV z odpowiedziami<input id="csvFile" type="file" accept=".csv,text/csv"></label><button id="importCsv">Importuj zamówienia</button><p class="notice" id="importNotice"></p></section></div></section>
+  </main>
+
+  <script>
+    const state = { orders: [], prices: [], payments: [], bill: { lines:[{priceId:null, qty:0}], customLines:[{name:"", qty:0, price:0}], discount:0 } };
+    const money = new Intl.NumberFormat("pl-PL", { style:"currency", currency:"PLN" });
+    const byId = id => document.getElementById(id);
+    const APP_ROOT = "{{ app_root }}";
+    const appUrl = url => url.startsWith("/api/") ? `${APP_ROOT}${url}` : url;
+    const api = async (url, options={}) => {
+      const res = await fetch(appUrl(url), { headers: { "Content-Type":"application/json", ...(options.headers || {}) }, ...options });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    };
+    const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[c]));
+    const priceById = id => state.prices.find(p => String(p.id) === String(id)) || state.prices[0] || { id:null, name:"", price:0 };
+    const selectedOrder = () => state.orders.find(o => o.orderNo === byId("orderSelect").value) || state.orders[0];
+
+    async function loadData() {
+      const data = await api("/api/bootstrap");
+      state.orders = data.orders; state.prices = data.prices; state.payments = data.payments;
+      if (!state.bill.lines[0].priceId && state.prices[0]) state.bill.lines[0].priceId = state.prices[0].id;
+      renderEverything();
+    }
+    function billTotal() {
+      const priced = state.bill.lines.reduce((sum,l) => sum + priceById(l.priceId).price * (Number(l.qty)||0), 0);
+      const custom = state.bill.customLines.reduce((sum,l) => sum + (Number(l.price)||0) * (Number(l.qty)||0), 0);
+      return Math.max(0, priced + custom - (Number(state.bill.discount)||0));
+    }
+    function renderOrderSelect() {
+      const q = byId("orderSearch").value.toLowerCase();
+      const rows = state.orders.filter(o => [o.orderNo,o.client,o.phone,o.address].join(" ").toLowerCase().includes(q));
+      const current = byId("orderSelect").value;
+      byId("orderSelect").innerHTML = rows.map(o => `<option value="${esc(o.orderNo)}">${esc(o.orderNo)} - ${esc(o.client)}</option>`).join("");
+      if (rows.some(o => o.orderNo === current)) byId("orderSelect").value = current;
+      renderOrderSummary();
+    }
+    function renderOrderSummary() {
+      const o = selectedOrder(); if (!o) return;
+      const fields = [["Klient",o.client],["Telefon",o.phone||"-"],["Typ",o.type||"-"],["Okres",o.period||"-"],["Porcje",o.portions||"-"],["Płatność",o.paymentMethod||"-"],["Adres",o.address||"-"],["Uwagi",o.notes||"-"]];
+      byId("orderSummary").innerHTML = fields.map(([k,v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("");
+    }
+    function renderBill() {
+      const options = state.prices.map(p => `<option value="${p.id}">${esc(p.name)} (${money.format(p.price)})</option>`).join("");
+      byId("billLines").innerHTML = state.bill.lines.map((l,i) => `<div class="line"><label>${i===0?"Abonament / pozycja":`Dodatkowa pozycja ${i}`}<select data-line="${i}" data-field="priceId">${options}</select></label><label>Ilość<input data-line="${i}" data-field="qty" type="number" min="0" step="0.5" value="${Number(l.qty)||0}"></label><div class="amount">${money.format(priceById(l.priceId).price)}</div><div class="amount">${money.format(priceById(l.priceId).price*(Number(l.qty)||0))}</div><button class="icon-button danger" data-remove-line="${i}" type="button">×</button></div>`).join("");
+      state.bill.lines.forEach((l,i) => { const el = document.querySelector(`select[data-line="${i}"]`); if (el) el.value = l.priceId; });
+      byId("customLines").innerHTML = state.bill.customLines.map((l,i) => `<div class="line"><label>Nazwa<input data-custom="${i}" data-field="name" value="${esc(l.name)}"></label><label>Ilość<input data-custom="${i}" data-field="qty" type="number" min="0" step="0.5" value="${Number(l.qty)||0}"></label><label>Cena<input data-custom="${i}" data-field="price" type="number" min="0" step="0.01" value="${Number(l.price)||0}"></label><div class="amount">${money.format((Number(l.price)||0)*(Number(l.qty)||0))}</div><button class="icon-button danger" data-remove-custom="${i}" type="button">×</button></div>`).join("");
+      byId("discount").value = state.bill.discount || 0;
+      byId("billTotal").textContent = money.format(billTotal());
+    }
+    function filteredPayments() {
+      const q = byId("paymentSearch").value.toLowerCase(), s = byId("statusFilter").value, f = byId("paymentDateFrom").value, t = byId("paymentDateTo").value;
+      return state.payments.filter(p => [p.orderNo,p.client,p.method].join(" ").toLowerCase().includes(q) && (!s || p.status===s) && (!f || p.date>=f) && (!t || p.date<=t));
+    }
+    function renderPayments() {
+      const rows = filteredPayments();
+      byId("paymentRows").innerHTML = rows.map(p => `<tr><td data-label="Data">${esc(p.date)}</td><td data-label="Nr">${esc(p.orderNo)}</td><td data-label="Klient">${esc(p.client)}</td><td data-label="Kwota">${money.format(p.amount)}</td><td data-label="Metoda">${esc(p.method)}</td><td data-label="Status"><span class="status ${p.status==="Zapłacone"?"paid":p.status==="Anulowane"?"bad":p.status==="Częściowo"?"partial":"wait"}">${esc(p.status)}</span></td><td data-label="Akcje"><div class="payment-actions"><select data-payment="${p.id}">${["Oczekuje","Częściowo","Zapłacone","Anulowane"].map(s=>`<option ${s===p.status?"selected":""}>${s}</option>`).join("")}</select><button class="icon-button danger" data-delete-payment="${p.id}" type="button">×</button></div></td></tr>`).join("");
+      const due = rows.filter(p => p.status !== "Zapłacone" && p.status !== "Anulowane").reduce((a,p)=>a+p.amount,0);
+      const paid = rows.filter(p => p.status === "Zapłacone").reduce((a,p)=>a+p.amount,0);
+      byId("paymentMetrics").innerHTML = [["Oczekuje",money.format(due)],["Zapłacone",money.format(paid)],["Liczba wpisów",rows.length],["Do kontaktu",rows.filter(p=>p.status==="Oczekuje").length]].map(([k,v])=>`<div class="metric"><span>${k}</span><strong>${v}</strong></div>`).join("");
+    }
+    function renderOrders() {
+      const q = byId("allOrderSearch").value.toLowerCase();
+      const rows = state.orders.filter(o => Object.values(o).join(" ").toLowerCase().includes(q));
+      byId("orderRows").innerHTML = rows.map(o => `<tr><td data-label="Zamówienie"><div class="order-main"><strong>${esc(o.orderNo)}</strong><span class="order-meta">${esc([o.type,o.period].filter(Boolean).join(" | ")||"-")}</span></div></td><td data-label="Klient"><div class="order-main"><strong>${esc(o.client)}</strong><span class="order-meta">${esc(o.phone||"-")}</span></div></td><td data-label="Porcje" class="order-portions">${esc(o.portions||"-")}</td><td data-label="Dostawa"><div class="order-address">${esc(o.address||"-")}</div>${o.notes?`<div class="order-meta">${esc(o.notes)}</div>`:""}</td></tr>`).join("");
+    }
+    function renderPrices() {
+      byId("priceRows").innerHTML = state.prices.map(p => `<div class="row price-row"><label>Nazwa<input data-price="${p.id}" data-field="name" value="${esc(p.name)}"></label><label>Cena brutto<input data-price="${p.id}" data-field="price" type="number" step="0.01" min="0" value="${p.price}"></label><button class="icon-button danger" data-delete-price="${p.id}" type="button">×</button></div>`).join("");
+    }
+    function renderEverything(){ renderOrderSelect(); renderBill(); renderPayments(); renderOrders(); renderPrices(); }
+    async function refresh(){ const data = await api("/api/bootstrap"); state.orders=data.orders; state.prices=data.prices; state.payments=data.payments; renderEverything(); }
+    function printDocument(title, html, size="A5"){ const w=window.open("","_blank"); w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:${size};margin:10mm}body{font-family:Arial,sans-serif;color:#202722}table{width:100%;border-collapse:collapse}th,td{padding:7px;border-bottom:1px solid #d8ded7;text-align:left}.num{text-align:right;white-space:nowrap}.top{display:flex;justify-content:space-between;border-bottom:2px solid #0f766e;padding-bottom:10px;margin-bottom:14px}.box{border:1px solid #d8ded7;border-radius:6px;padding:10px;margin:10px 0}.total{display:flex;justify-content:space-between;font-size:16pt;font-weight:800;border-top:2px solid #0f766e;margin-top:12px;padding-top:10px}.signature{margin-top:22px;display:flex;justify-content:flex-end}.signature-box{width:58%;text-align:center;color:#66736a;font-size:9pt}.signature-line{border-top:1px solid #202722;height:22px}</style></head><body>${html}<script>setTimeout(()=>window.print(),200)<\/script></body></html>`); w.document.close(); }
+    function billItems(){ return [...state.bill.lines.filter(l=>Number(l.qty)>0).map(l=>({name:priceById(l.priceId).name,qty:Number(l.qty),price:priceById(l.priceId).price,amount:priceById(l.priceId).price*Number(l.qty)})), ...state.bill.customLines.filter(l=>Number(l.qty)>0&&Number(l.price)>0).map(l=>({name:l.name||"Pozycja niestandardowa",qty:Number(l.qty),price:Number(l.price),amount:Number(l.qty)*Number(l.price)}))]; }
+    document.querySelectorAll(".tab[data-view]").forEach(tab => tab.addEventListener("click",()=>{document.querySelectorAll(".tab,.view").forEach(el=>el.classList.remove("active")); tab.classList.add("active"); byId(tab.dataset.view).classList.add("active");}));
+    byId("paymentsLogout").addEventListener("click", async()=>{ await fetch("/api/logout", { method:"POST", headers:{ "Content-Type":"application/json" }, body:"{}" }); window.location.href = "/"; });
+    byId("orderSearch").addEventListener("input", renderOrderSelect); byId("orderSelect").addEventListener("change", renderOrderSummary);
+    byId("billLines").addEventListener("input", e => { const i=Number(e.target.dataset.line), f=e.target.dataset.field; if(Number.isInteger(i)&&f){ state.bill.lines[i][f]=f==="qty"?Number(e.target.value):Number(e.target.value); renderBill(); }});
+    byId("billLines").addEventListener("click", e => { const i=Number(e.target.dataset.removeLine); if(Number.isInteger(i)){ state.bill.lines.splice(i,1); if(!state.bill.lines.length) state.bill.lines.push({priceId:state.prices[0]?.id,qty:0}); renderBill(); }});
+    byId("customLines").addEventListener("input", e => { const i=Number(e.target.dataset.custom), f=e.target.dataset.field; if(Number.isInteger(i)&&f){ state.bill.customLines[i][f]=f==="name"?e.target.value:Number(e.target.value); renderBill(); }});
+    byId("customLines").addEventListener("click", e => { const i=Number(e.target.dataset.removeCustom); if(Number.isInteger(i)){ state.bill.customLines.splice(i,1); if(!state.bill.customLines.length) state.bill.customLines.push({name:"",qty:0,price:0}); renderBill(); }});
+    byId("addBillLine").addEventListener("click",()=>{state.bill.lines.push({priceId:state.prices[0]?.id,qty:0}); renderBill();});
+    byId("addCustomLine").addEventListener("click",()=>{state.bill.customLines.push({name:"",qty:0,price:0}); renderBill();});
+    byId("discount").addEventListener("input",e=>{state.bill.discount=Number(e.target.value); renderBill();});
+    byId("clearBill").addEventListener("click",()=>{state.bill={lines:[{priceId:state.prices[0]?.id,qty:0}],customLines:[{name:"",qty:0,price:0}],discount:0}; renderBill();});
+    byId("savePayment").addEventListener("click", async()=>{ const o=selectedOrder(); const p=await api("/api/payments",{method:"POST",body:JSON.stringify({date:new Date().toISOString().slice(0,10),orderNo:o.orderNo,client:o.client,amount:billTotal(),method:o.paymentMethod,status:"Oczekuje"})}); state.payments.unshift(p); renderPayments(); byId("billNotice").textContent=`Zaksięgowano rachunek ${o.orderNo} na kwotę ${money.format(billTotal())}.`; });
+    byId("printBill").addEventListener("click",()=>{ const o=selectedOrder(); const rows=billItems().map(i=>`<tr><td>${esc(i.name)}</td><td class="num">${i.qty}</td><td class="num">${money.format(i.price)}</td><td class="num">${money.format(i.amount)}</td></tr>`).join(""); printDocument(`Rachunek ${o.orderNo}`,`<div class="top"><div><h1>Rachunek</h1><div>${esc(o.orderNo)} | ${new Date().toLocaleDateString("pl-PL")}</div></div><div>Format A5</div></div><section class="box"><b>${esc(o.client)}</b><br>${esc(o.address||"-")}<br>${esc(o.paymentMethod||"-")}</section><section class="box"><table><thead><tr><th>Nazwa</th><th class="num">Ilość</th><th class="num">Cena</th><th class="num">Wartość</th></tr></thead><tbody>${rows}</tbody></table><div class="total"><span>Do zapłaty</span><span>${money.format(billTotal())}</span></div></section><div class="signature"><div class="signature-box"><div class="signature-line"></div>Podpis wystawiającego</div></div>`); });
+    ["paymentSearch","statusFilter","paymentDateFrom","paymentDateTo"].forEach(id=>byId(id).addEventListener("input",renderPayments));
+    byId("clearPaymentDates").addEventListener("click",()=>{byId("paymentDateFrom").value="";byId("paymentDateTo").value="";renderPayments();});
+    byId("paymentRows").addEventListener("change", async e=>{ const id=Number(e.target.dataset.payment); if(id){ const p=await api(`/api/payments/${id}`,{method:"PATCH",body:JSON.stringify({status:e.target.value})}); const i=state.payments.findIndex(x=>x.id===id); state.payments[i]=p; renderPayments(); }});
+    byId("paymentRows").addEventListener("click", async e=>{ const id=Number(e.target.dataset.deletePayment); if(id && confirm("Usunąć wpis płatności?")){ await api(`/api/payments/${id}`,{method:"DELETE"}); state.payments=state.payments.filter(p=>p.id!==id); renderPayments(); }});
+    byId("deletePaidPayments").addEventListener("click", async()=>{ if(confirm("Usunąć zapłacone wpisy z wybranego zakresu dat?")){ await api("/api/payments/delete-paid",{method:"POST",body:JSON.stringify({from:byId("paymentDateFrom").value,to:byId("paymentDateTo").value})}); await refresh(); }});
+    byId("printPayments").addEventListener("click",()=>{ const rows=filteredPayments(); const html=`<div class="top"><h1>Podsumowanie płatności</h1><div>${new Date().toLocaleDateString("pl-PL")}</div></div><table><thead><tr><th>Data</th><th>Nr</th><th>Klient</th><th>Status</th><th class="num">Kwota</th></tr></thead><tbody>${rows.map(p=>`<tr><td>${p.date}</td><td>${esc(p.orderNo)}</td><td>${esc(p.client)}</td><td>${esc(p.status)}</td><td class="num">${money.format(p.amount)}</td></tr>`).join("")}</tbody></table>`; printDocument("Podsumowanie płatności",html,"A4"); });
+    byId("downloadLogs").addEventListener("click", async()=>{ const logs=await api("/api/payment-logs"); const csv=[["Data","Akcja","ID płatności","Nr","Klient","Przed","Po"],...logs.map(l=>[l.createdAt,l.action,l.paymentId,l.orderNo,l.client,l.before,l.after])].map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n"); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})); a.download="logi-platnosci.csv"; a.click(); });
+    byId("allOrderSearch").addEventListener("input",renderOrders);
+    byId("priceRows").addEventListener("input", async e=>{ const id=Number(e.target.dataset.price), f=e.target.dataset.field; if(id&&f){ const item=state.prices.find(p=>p.id===id); item[f]=f==="price"?Number(e.target.value):e.target.value; await api(`/api/prices/${id}`,{method:"PATCH",body:JSON.stringify({[f]:item[f]})}); renderBill(); }});
+    byId("priceRows").addEventListener("click", async e=>{ const id=Number(e.target.dataset.deletePrice); if(id&&confirm("Usunąć pozycję z cennika?")){ await api(`/api/prices/${id}`,{method:"DELETE"}); await refresh(); }});
+    byId("addPrice").addEventListener("click", async()=>{ const p=await api("/api/prices",{method:"POST",body:JSON.stringify({name:"Nowa pozycja",price:0})}); state.prices.push(p); renderPrices(); renderBill(); });
+    byId("importCsv").addEventListener("click", async()=>{ const file=byId("csvFile").files[0]; if(!file){byId("importNotice").textContent="Wybierz plik CSV.";return;} const form=new FormData(); form.append("file",file); const res=await fetch(appUrl("/api/import/orders"),{method:"POST",body:form}); const data=await res.json(); byId("importNotice").textContent=`Zaimportowano ${data.imported||0} zamówień.`; await refresh(); });
+    loadData();
+  </script>
+</body>
+</html>
