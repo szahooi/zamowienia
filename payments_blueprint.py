@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import io
@@ -21,7 +21,7 @@ SEED_PRICES = [
 ]
 
 SEED_PAYMENTS = [
-    ("2026-05-28", "ZAM/2026/000", "www www", 236, "GotĂłwka przy odbiorze", "ZapĹ‚acone"),
+    ("2026-05-28", "ZAM/2026/001", "www www", 236, "GotĂłwka przy odbiorze", "ZapĹ‚acone"),
 ]
 
 
