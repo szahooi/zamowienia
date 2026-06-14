@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from functools import wraps
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request, session
+from flask import Flask, Response, jsonify, render_template, request, session
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect, text
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -379,6 +379,11 @@ def serialize_state(user: User) -> dict:
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    return Response("User-agent: *\nDisallow: /\n", mimetype="text/plain")
 
 
 @app.post("/api/login")
