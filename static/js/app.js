@@ -39,6 +39,10 @@ function clientById(clientId) {
   return byId(state.clients, clientId);
 }
 
+function clientSearchLabel(client) {
+  return [client.name, client.address].filter(Boolean).join(" - ");
+}
+
 function nameOf(rows, rowId, fallback) {
   return byId(rows, rowId)?.name || fallback;
 }
@@ -72,6 +76,33 @@ function defaultClientOrder(driverId) {
     .filter((row) => row.driver_id === driverId)
     .sort((a, b) => a.position - b.position)
     .map((row) => row.client_id);
+}
+
+function uniqueClientIds(entries) {
+  const ids = [];
+  entries.forEach(({ client }) => {
+    if (!ids.includes(client.id)) ids.push(client.id);
+  });
+  return ids;
+}
+
+function orderedDriverEntries(driverId, dateText) {
+  const savedOrder = defaultClientOrder(driverId);
+  return deliveriesFor(dateText, { driver_id: driverId })
+    .filter(({ order }) => !removed(dateText, order.id))
+    .sort((a, b) => {
+      const ai = savedOrder.indexOf(a.client.id);
+      const bi = savedOrder.indexOf(b.client.id);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.client.name.localeCompare(b.client.name, "pl");
+    });
+}
+
+function mergeDefaultOrder(driverId, visibleClientIds) {
+  const savedOrder = defaultClientOrder(driverId);
+  return [
+    ...visibleClientIds,
+    ...savedOrder.filter((clientId) => !visibleClientIds.includes(clientId))
+  ];
 }
 
 function appliesOn(order, dateText) {
@@ -112,7 +143,10 @@ function renderSelects() {
   $("#clientDriver").innerHTML = driverOptions;
   $("#driverSelect").innerHTML = driverOptions;
   if (selectedDriver && state.drivers.some((driver) => String(driver.id) === selectedDriver)) $("#driverSelect").value = selectedDriver;
-  $("#orderClient").innerHTML = state.clients.filter((client) => client.active).map((client) => `<option value="${client.id}">${client.name}</option>`).join("");
+  $("#orderClientOptions").innerHTML = state.clients
+    .filter((client) => client.active)
+    .map((client) => `<option value="${clientSearchLabel(client)}"></option>`)
+    .join("");
   $("#orderCategory").innerHTML = state.categories.map((category) => `<option value="${category.id}">${category.name}</option>`).join("");
   $("#catalogCategory").innerHTML = state.categories.map((category) => `<option value="${category.id}">${category.name}</option>`).join("");
   renderMealSelect();
@@ -126,6 +160,20 @@ function renderMealSelect() {
 function syncClientDriverToRegion() {
   const region = byId(state.regions, $("#clientRegion").value);
   if (region?.driver_id) $("#clientDriver").value = region.driver_id;
+}
+
+function syncOrderClientFromSearch() {
+  const value = $("#orderClientSearch").value.trim().toLowerCase();
+  const client = state.clients
+    .filter((row) => row.active)
+    .find((row) => clientSearchLabel(row).toLowerCase() === value || row.name.toLowerCase() === value);
+  $("#orderClient").value = client?.id || "";
+}
+
+function setOrderClient(clientId) {
+  const client = clientById(clientId);
+  $("#orderClient").value = client?.id || "";
+  $("#orderClientSearch").value = client ? clientSearchLabel(client) : "";
 }
 
 function renderAccess() {
@@ -253,15 +301,8 @@ function deliveryWord(count) {
 function renderDriver() {
   const driverId = activeDriverId();
   const dateText = $("#driverDate").value;
-  const savedOrder = defaultClientOrder(driverId);
   if ($("#driverSelect").value !== String(driverId)) $("#driverSelect").value = driverId;
-  const entries = deliveriesFor(dateText, { driver_id: driverId })
-    .filter(({ order }) => !removed(dateText, order.id))
-    .sort((a, b) => {
-      const ai = savedOrder.indexOf(a.client.id);
-      const bi = savedOrder.indexOf(b.client.id);
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.client.name.localeCompare(b.client.name, "pl");
-    });
+  const entries = orderedDriverEntries(driverId, dateText);
   $("#driverDeliveryCount").textContent = `${entries.length} ${deliveryWord(entries.length)}`;
   $("#driverList").innerHTML = entries.length ? entries.map(({ order, client }, index) => {
     const status = statusFor(dateText, order.id);
@@ -270,6 +311,10 @@ function renderDriver() {
     return `
       <article class="delivery card driver-card bg-base-100 border p-3" draggable="true" data-order-id="${order.id}">
         <div class="driver-order-buttons grid gap-1">
+          <label class="route-position-control">
+            <span>Nr</span>
+            <input class="input input-bordered input-sm route-position-input" type="number" min="1" max="${entries.length}" value="${index + 1}" data-order-position="${order.id}" aria-label="Numer kolejności" />
+          </label>
           <button class="mini-order" data-move-delivery="${order.id}" data-move-direction="up">↑</button>
           <button class="mini-order" data-move-delivery="${order.id}" data-move-direction="down">↓</button>
         </div>
@@ -384,19 +429,33 @@ function orderPayload(form) {
 async function saveDefaultOrder(orderId, direction) {
   const driverId = activeDriverId();
   const dateText = $("#driverDate").value;
-  const entries = deliveriesFor(dateText, { driver_id: driverId }).filter(({ order }) => !removed(dateText, order.id));
-  const current = entries.map(({ client }) => client.id);
-  const ordered = defaultClientOrder(driverId).filter((clientId) => current.includes(clientId));
-  current.forEach((clientId) => {
-    if (!ordered.includes(clientId)) ordered.push(clientId);
-  });
+  const entries = orderedDriverEntries(driverId, dateText);
+  const ordered = uniqueClientIds(entries);
   const movedClient = entries.find(({ order }) => order.id === id(orderId))?.client.id;
   const from = ordered.indexOf(movedClient);
   const to = direction === "up" ? from - 1 : from + 1;
   if (from === -1 || to < 0 || to >= ordered.length) return;
   ordered.splice(from, 1);
   ordered.splice(to, 0, movedClient);
-  await api("/api/default-order", { method: "POST", body: JSON.stringify({ driver_id: driverId, client_ids: ordered }) });
+  await api("/api/default-order", { method: "POST", body: JSON.stringify({ driver_id: driverId, client_ids: mergeDefaultOrder(driverId, ordered) }) });
+  await loadState();
+}
+
+async function saveDefaultOrderPosition(orderId, position) {
+  const driverId = activeDriverId();
+  const dateText = $("#driverDate").value;
+  const entries = orderedDriverEntries(driverId, dateText);
+  const ordered = uniqueClientIds(entries);
+  const movedClient = entries.find(({ order }) => order.id === id(orderId))?.client.id;
+  const from = ordered.indexOf(movedClient);
+  const to = Math.max(0, Math.min(Number(position) - 1, ordered.length - 1));
+  if (from === -1 || Number.isNaN(to) || from === to) {
+    renderDriver();
+    return;
+  }
+  ordered.splice(from, 1);
+  ordered.splice(to, 0, movedClient);
+  await api("/api/default-order", { method: "POST", body: JSON.stringify({ driver_id: driverId, client_ids: mergeDefaultOrder(driverId, ordered) }) });
   await loadState();
 }
 
@@ -421,6 +480,8 @@ function resetClientForm() {
 function resetOrderForm() {
   $("#orderForm").reset();
   $("#orderForm [name='id']").value = "";
+  $("#orderClient").value = "";
+  $("#orderFormMessage").textContent = "";
   $$(`#orderForm [name='days']`).forEach((box) => {
     box.checked = ["1", "2", "3", "4", "5"].includes(box.value);
   });
@@ -460,6 +521,8 @@ function bindEvents() {
   $("#clientRegionFilter").addEventListener("change", renderClients);
   $("#clientStatusFilter").addEventListener("change", renderClients);
   $("#clientSort").addEventListener("change", renderClients);
+  $("#orderClientSearch").addEventListener("input", syncOrderClientFromSearch);
+  $("#orderClientSearch").addEventListener("change", syncOrderClientFromSearch);
   $("#orderSearch").addEventListener("input", renderOrders);
   $("#kitchenDate").addEventListener("change", renderKitchen);
   $("#driverSelect").addEventListener("change", renderDriver);
@@ -490,16 +553,26 @@ function bindEvents() {
   });
   $("#orderForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    syncOrderClientFromSearch();
+    if (!event.currentTarget.elements.client_id.value) {
+      alert("Wybierz klienta z listy podpowiedzi.");
+      $("#orderClientSearch").focus();
+      return;
+    }
     const orderId = event.currentTarget.elements.id.value;
     await api(orderId ? `/api/orders/${orderId}` : "/api/orders", { method: orderId ? "PUT" : "POST", body: JSON.stringify(orderPayload(event.currentTarget)) });
     resetOrderForm();
     await loadState();
+    $("#orderFormMessage").textContent = orderId ? "Plan został zapisany." : "Plan został dodany.";
   });
   $("#regionForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    await api("/api/regions", { method: "POST", body: JSON.stringify(formData(event.currentTarget)) });
+    const region = await api("/api/regions", { method: "POST", body: JSON.stringify(formData(event.currentTarget)) });
+    state.regions.push(region);
     event.currentTarget.reset();
-    await loadState();
+    renderSelects();
+    renderSettings();
+    openView("settings");
   });
   $("#driverForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -588,7 +661,7 @@ function bindEvents() {
       const order = byId(state.orders, target.dataset.editOrder);
       const form = $("#orderForm");
       form.elements.id.value = order.id;
-      form.elements.client_id.value = order.client_id;
+      setOrderClient(order.client_id);
       form.elements.category_id.value = order.category_id;
       renderMealSelect();
       form.elements.meal_id.value = order.meal_id;
@@ -602,6 +675,7 @@ function bindEvents() {
       form.elements.notes.value = order.notes;
       $("#orderSubmitButton").textContent = "Zapisz plan";
       $("#orderCancelEdit").classList.remove("hidden");
+      $("#orderFormMessage").textContent = "";
       form.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     if (target.dataset?.editDriver) {
@@ -617,7 +691,7 @@ function bindEvents() {
       $("#driverFormTitle").textContent = "Edytuj kierowcę";
       $("#driverSubmitButton").textContent = "Zapisz kierowcę";
       $("#driverCancelEdit").classList.remove("hidden");
-      form.scrollIntoView({ behavior: "smooth", block: "start" });
+      $("#driverFormTitle").scrollIntoView({ behavior: "smooth", block: "center" });
     }
     if (target.dataset?.deleteDriver) {
       const driver = byId(state.drivers, target.dataset.deleteDriver);
@@ -642,10 +716,16 @@ function bindEvents() {
       await loadState();
     }
     if (target.dataset?.deleteClient) {
+      const client = byId(state.clients, target.dataset.deleteClient);
+      if (!confirm(`Czy na pewno usunąć klienta "${client?.name || "wybranego klienta"}"?`)) return;
       await api(`/api/clients/${target.dataset.deleteClient}`, { method: "DELETE" });
       await loadState();
     }
     if (target.dataset?.deleteOrder) {
+      const order = byId(state.orders, target.dataset.deleteOrder);
+      const client = order ? clientById(order.client_id) : null;
+      const meal = order ? nameOf(state.meals, order.meal_id, "plan") : "plan";
+      if (!confirm(`Czy na pewno usunąć plan: ${client?.name || "Klient"} - ${meal}?`)) return;
       await api(`/api/orders/${target.dataset.deleteOrder}`, { method: "DELETE" });
       await loadState();
     }
@@ -653,6 +733,9 @@ function bindEvents() {
 
   document.body.addEventListener("change", async (event) => {
     const target = event.target;
+    if (target.dataset?.orderPosition) {
+      await saveDefaultOrderPosition(target.dataset.orderPosition, target.value);
+    }
     if (target.dataset?.driverNoteClient) {
       await api("/api/driver-notes", {
         method: "POST",

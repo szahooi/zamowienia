@@ -548,9 +548,10 @@ def delete_order(order_id: int):
 def add_region():
     payload = request.get_json(force=True)
     first_driver = Driver.query.order_by(Driver.name).first()
-    db.session.add(Region(name=payload["name"], driver_id=payload.get("driver_id") or (first_driver.id if first_driver else None)))
+    region = Region(name=payload["name"], driver_id=payload.get("driver_id") or (first_driver.id if first_driver else None))
+    db.session.add(region)
     db.session.commit()
-    return jsonify({"ok": True})
+    return jsonify({"id": region.id, "name": region.name, "driver_id": region.driver_id})
 
 
 @app.put("/api/regions/<int:region_id>")
@@ -750,10 +751,12 @@ def set_delivery_status():
 def set_default_order():
     user = current_user()
     payload = request.get_json(force=True)
-    driver_id = user.driver_id if user.role == "driver" else payload["driver_id"]
+    driver_id = user.driver_id if user.role == "driver" else int(payload["driver_id"])
+    if not db.session.get(Driver, driver_id):
+        return jsonify({"error": "Nie znaleziono kierowcy"}), 404
     DriverDefaultOrder.query.filter_by(driver_id=driver_id).delete()
     for position, client_id in enumerate(payload.get("client_ids", [])):
-        db.session.add(DriverDefaultOrder(driver_id=driver_id, client_id=client_id, position=position))
+        db.session.add(DriverDefaultOrder(driver_id=driver_id, client_id=int(client_id), position=position))
     db.session.commit()
     return jsonify({"ok": True})
 
