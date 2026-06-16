@@ -7,6 +7,7 @@ const dateFmt = new Intl.DateTimeFormat("pl-PL", { weekday: "long", year: "numer
 async function api(path, options = {}) {
   const response = await fetch(path, {
     credentials: "same-origin",
+    cache: "no-store",
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options
   });
@@ -27,6 +28,16 @@ function addDays(date, days) {
   return next;
 }
 
+function localDate(dateText) {
+  return new Date(`${dateText}T12:00:00`);
+}
+
+function daysUntil(dateText) {
+  const today = localDate(iso(new Date()));
+  const target = localDate(dateText);
+  return Math.round((target - today) / 86400000);
+}
+
 function id(value) {
   return Number(value);
 }
@@ -39,8 +50,33 @@ function clientById(clientId) {
   return byId(state.clients, clientId);
 }
 
+function escapeAttr(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;" }[char]));
+}
+
 function clientSearchLabel(client) {
   return [client.name, client.address].filter(Boolean).join(" - ");
+}
+
+function orderItems(order) {
+  return order.items?.length ? order.items : [{ category_id: order.category_id, meal_id: order.meal_id, quantity: order.quantity }];
+}
+
+function mealItemsLabel(items) {
+  return items.map((item) => `${nameOf(state.meals, item.meal_id, "-")} x ${item.quantity}`).join(" · ");
+}
+
+function normalizeSearch(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}+]+/gu, " ")
+    .trim();
+}
+
+function uniqueRows(rows) {
+  return rows.filter((row, index) => rows.findIndex((item) => item.id === row.id) === index);
 }
 
 function nameOf(rows, rowId, fallback) {
@@ -145,16 +181,73 @@ function renderSelects() {
   if (selectedDriver && state.drivers.some((driver) => String(driver.id) === selectedDriver)) $("#driverSelect").value = selectedDriver;
   $("#orderClientOptions").innerHTML = state.clients
     .filter((client) => client.active)
-    .map((client) => `<option value="${clientSearchLabel(client)}"></option>`)
+    .map((client) => `<option value="${escapeAttr(clientSearchLabel(client))}"></option>`)
     .join("");
-  $("#orderCategory").innerHTML = state.categories.map((category) => `<option value="${category.id}">${category.name}</option>`).join("");
   $("#catalogCategory").innerHTML = state.categories.map((category) => `<option value="${category.id}">${category.name}</option>`).join("");
-  renderMealSelect();
+  if (!$("#orderItems").children.length) renderOrderItems([{}]);
+  renderOrderItemMealSelects();
 }
 
-function renderMealSelect() {
-  const categoryId = id($("#orderCategory").value || state.categories[0]?.id);
-  $("#orderMeal").innerHTML = state.meals.filter((meal) => meal.category_id === categoryId).map((meal) => `<option value="${meal.id}">${meal.name}</option>`).join("");
+function categoryOptions(selectedId) {
+  return state.categories.map((category) => `<option value="${category.id}" ${category.id === Number(selectedId) ? "selected" : ""}>${category.name}</option>`).join("");
+}
+
+function mealOptions(categoryId, selectedId) {
+  return state.meals
+    .filter((meal) => meal.category_id === Number(categoryId))
+    .map((meal) => `<option value="${meal.id}" ${meal.id === Number(selectedId) ? "selected" : ""}>${meal.name}</option>`)
+    .join("");
+}
+
+function renderOrderItemMealSelect(row) {
+  const categorySelect = row.querySelector("[data-order-item-category]");
+  const mealSelect = row.querySelector("[data-order-item-meal]");
+  const previousMeal = mealSelect.value;
+  mealSelect.innerHTML = mealOptions(categorySelect.value, previousMeal);
+  if (!mealSelect.value) mealSelect.value = state.meals.find((meal) => meal.category_id === Number(categorySelect.value))?.id || "";
+}
+
+function renderOrderItemMealSelects() {
+  $$("#orderItems .order-item-row").forEach(renderOrderItemMealSelect);
+}
+
+function updateOrderItemRemoveButtons() {
+  const rows = $$("#orderItems .order-item-row");
+  rows.forEach((row) => {
+    row.querySelector("[data-remove-order-item]").classList.toggle("hidden", rows.length === 1);
+  });
+}
+
+function addOrderItemRow(item = {}) {
+  const categoryId = item.category_id || state.categories[0]?.id || "";
+  const mealId = item.meal_id || state.meals.find((meal) => meal.category_id === Number(categoryId))?.id || "";
+  const row = document.createElement("div");
+  row.className = "order-item-row";
+  row.innerHTML = `
+    <label class="form-control">
+      <span class="label-text">Kategoria</span>
+      <select class="select select-bordered" data-order-item-category required>${categoryOptions(categoryId)}</select>
+    </label>
+    <label class="form-control">
+      <span class="label-text">Pozycja</span>
+      <select class="select select-bordered" data-order-item-meal required></select>
+    </label>
+    <label class="form-control">
+      <span class="label-text">Ilość</span>
+      <input class="input input-bordered" type="number" min="1" value="${Number(item.quantity || 1)}" data-order-item-quantity required />
+    </label>
+    <button class="btn btn-error btn-outline btn-sm order-item-remove" type="button" data-remove-order-item>Usuń</button>
+  `;
+  $("#orderItems").appendChild(row);
+  renderOrderItemMealSelect(row);
+  row.querySelector("[data-order-item-meal]").value = mealId;
+  updateOrderItemRemoveButtons();
+}
+
+function renderOrderItems(items = [{}]) {
+  $("#orderItems").innerHTML = "";
+  (items.length ? items : [{}]).forEach(addOrderItemRow);
+  updateOrderItemRemoveButtons();
 }
 
 function syncClientDriverToRegion() {
@@ -162,12 +255,29 @@ function syncClientDriverToRegion() {
   if (region?.driver_id) $("#clientDriver").value = region.driver_id;
 }
 
+function findOrderClientFromSearch() {
+  const value = normalizeSearch($("#orderClientSearch").value);
+  if (!value) return null;
+  const activeClients = state.clients.filter((row) => row.active);
+  const exact = activeClients.filter((row) => [clientSearchLabel(row), row.name, row.phone].some((field) => normalizeSearch(field) === value));
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return null;
+  const startsWith = activeClients.filter((row) => [clientSearchLabel(row), row.name].some((field) => normalizeSearch(field).startsWith(value)));
+  if (startsWith.length === 1) return startsWith[0];
+  const contains = activeClients.filter((row) => [clientSearchLabel(row), row.name, row.phone, row.address].some((field) => normalizeSearch(field).includes(value)));
+  const unique = uniqueRows(contains);
+  return unique.length === 1 ? unique[0] : null;
+}
+
 function syncOrderClientFromSearch() {
-  const value = $("#orderClientSearch").value.trim().toLowerCase();
-  const client = state.clients
-    .filter((row) => row.active)
-    .find((row) => clientSearchLabel(row).toLowerCase() === value || row.name.toLowerCase() === value);
+  const client = findOrderClientFromSearch();
   $("#orderClient").value = client?.id || "";
+  return client;
+}
+
+function finalizeOrderClientSearch() {
+  const client = syncOrderClientFromSearch();
+  if (client) setOrderClient(client.id);
 }
 
 function setOrderClient(clientId) {
@@ -191,6 +301,30 @@ function renderDashboard() {
   $("#tomorrowCount").textContent = deliveriesFor(tomorrow).length;
   $("#regionCount").textContent = state.regions.length;
   renderKitchenInto("#dashboardKitchen", tomorrow);
+  renderExpiringPlans();
+}
+
+function renderExpiringPlans() {
+  const expiring = state.orders
+    .map((order) => ({ order, client: clientById(order.client_id), daysLeft: daysUntil(order.end_date) }))
+    .filter(({ client, daysLeft }) => client?.active && daysLeft >= 0 && daysLeft <= 3)
+    .sort((a, b) => a.daysLeft - b.daysLeft || a.client.name.localeCompare(b.client.name, "pl"));
+
+  $("#expiringPlans").innerHTML = expiring.length ? expiring.map(({ order, client, daysLeft }) => {
+    const leftText = daysLeft === 0 ? "kończy się dzisiaj" : daysLeft === 1 ? "został 1 dzień" : `zostały ${daysLeft} dni`;
+    return `
+      <article class="expiring-plan">
+        <div>
+          <strong>${client.name}</strong>
+          <div class="text-sm opacity-70">${mealItemsLabel(orderItems(order))}</div>
+        </div>
+        <div class="expiring-plan-meta">
+          <span>${leftText}</span>
+          <span>${order.end_date}</span>
+        </div>
+      </article>
+    `;
+  }).join("") : `<div class="alert">Brak planów kończących się w ciągu 3 dni.</div>`;
 }
 
 function renderClients() {
@@ -234,10 +368,12 @@ function renderClients() {
 function kitchenTotals(dateText) {
   const totals = new Map();
   deliveriesFor(dateText).forEach(({ order, client }) => {
-    const key = `${client.region_id}|${order.category_id}|${order.meal_id}`;
-    const current = totals.get(key) || { region_id: client.region_id, category_id: order.category_id, meal_id: order.meal_id, quantity: 0 };
-    current.quantity += Number(order.quantity || 1);
-    totals.set(key, current);
+    orderItems(order).forEach((item) => {
+      const key = `${client.region_id}|${item.category_id}|${item.meal_id}`;
+      const current = totals.get(key) || { region_id: client.region_id, category_id: item.category_id, meal_id: item.meal_id, quantity: 0 };
+      current.quantity += Number(item.quantity || 1);
+      totals.set(key, current);
+    });
   });
   return Array.from(totals.values());
 }
@@ -271,11 +407,12 @@ function renderOrders() {
   });
   $("#ordersList").innerHTML = orders.length ? orders.map((order) => {
     const client = clientById(order.client_id);
+    const items = orderItems(order);
     const days = Number(order.interval_days || 0) > 1 ? `co ${order.interval_days} dzień` : order.days.length ? order.days.map((day) => ["Nd", "Pon", "Wt", "Śr", "Czw", "Pt", "Sob"][day]).join(", ") : "daty wybrane";
     return `
       <article class="card app-card bg-base-100 border"><div class="card-body">
         <div class="flex justify-between gap-2">
-          <strong>${client?.name || "Klient"} - ${nameOf(state.meals, order.meal_id, "-")} x ${order.quantity}</strong>
+          <strong>${client?.name || "Klient"} - ${mealItemsLabel(items)}</strong>
           <span class="badge">${client ? nameOf(state.regions, client.region_id, "-") : "-"}</span>
         </div>
         <div class="plan-dates">
@@ -328,7 +465,9 @@ function renderDriver() {
             <span>${client.phone || "Brak telefonu"}</span>
             ${phoneHref ? `<a class="btn btn-xs btn-outline" href="tel:${phoneHref}">Dzwoń</a>` : ""}
           </div>
-          <div class="driver-meal"><strong>${nameOf(state.meals, order.meal_id, "-")}</strong><span>x ${order.quantity}</span></div>
+          <div class="driver-meal-list">
+            ${orderItems(order).map((item) => `<div class="driver-meal"><strong>${nameOf(state.meals, item.meal_id, "-")}</strong><span>x ${item.quantity}</span></div>`).join("")}
+          </div>
           ${(client.notes || order.notes) ? `<div class="text-sm">${[client.notes, order.notes].filter(Boolean).join(" · ")}</div>` : ""}
           <textarea class="textarea textarea-bordered driver-note" data-driver-note-client="${client.id}" placeholder="Notatka kierowcy">${note}</textarea>
         </div>
@@ -411,17 +550,24 @@ function customDates(value) {
 
 function orderPayload(form) {
   const data = new FormData(form);
+  const items = $$("#orderItems .order-item-row").map((row) => ({
+    category_id: id(row.querySelector("[data-order-item-category]").value),
+    meal_id: id(row.querySelector("[data-order-item-meal]").value),
+    quantity: Number(row.querySelector("[data-order-item-quantity]").value || 1)
+  }));
+  const firstItem = items[0] || {};
   return {
     client_id: id(data.get("client_id")),
-    category_id: id(data.get("category_id")),
-    meal_id: id(data.get("meal_id")),
+    category_id: firstItem.category_id,
+    meal_id: firstItem.meal_id,
     start_date: data.get("start_date"),
     end_date: data.get("end_date"),
     days: data.getAll("days").map(Number),
     interval_days: data.get("every_other_day") ? 2 : 0,
     custom_dates: customDates(data.get("custom_dates") || ""),
     excluded_dates: customDates(data.get("excluded_dates") || ""),
-    quantity: Number(data.get("quantity") || 1),
+    quantity: firstItem.quantity || 1,
+    items,
     notes: data.get("notes") || ""
   };
 }
@@ -482,6 +628,7 @@ function resetOrderForm() {
   $("#orderForm [name='id']").value = "";
   $("#orderClient").value = "";
   $("#orderFormMessage").textContent = "";
+  renderOrderItems([{}]);
   $$(`#orderForm [name='days']`).forEach((box) => {
     box.checked = ["1", "2", "3", "4", "5"].includes(box.value);
   });
@@ -515,14 +662,13 @@ function bindEvents() {
     $("#loginScreen").classList.remove("hidden");
     $("#appShell").classList.add("hidden");
   });
-  $("#orderCategory").addEventListener("change", renderMealSelect);
   $("#clientRegion").addEventListener("change", syncClientDriverToRegion);
   $("#clientSearch").addEventListener("input", renderClients);
   $("#clientRegionFilter").addEventListener("change", renderClients);
   $("#clientStatusFilter").addEventListener("change", renderClients);
   $("#clientSort").addEventListener("change", renderClients);
   $("#orderClientSearch").addEventListener("input", syncOrderClientFromSearch);
-  $("#orderClientSearch").addEventListener("change", syncOrderClientFromSearch);
+  $("#orderClientSearch").addEventListener("change", finalizeOrderClientSearch);
   $("#orderSearch").addEventListener("input", renderOrders);
   $("#kitchenDate").addEventListener("change", renderKitchen);
   $("#driverSelect").addEventListener("change", renderDriver);
@@ -531,6 +677,7 @@ function bindEvents() {
   $("#clientCancelEdit").addEventListener("click", resetClientForm);
   $("#orderCancelEdit").addEventListener("click", resetOrderForm);
   $("#driverCancelEdit").addEventListener("click", resetDriverForm);
+  $("#addOrderItem").addEventListener("click", () => addOrderItemRow({}));
   $("#cleanupDeliveries").addEventListener("click", async () => {
     const dateTo = $("#cleanupDate").value;
     if (!dateTo) return;
@@ -553,12 +700,13 @@ function bindEvents() {
   });
   $("#orderForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    syncOrderClientFromSearch();
-    if (!event.currentTarget.elements.client_id.value) {
-      alert("Wybierz klienta z listy podpowiedzi.");
+    const selectedClient = syncOrderClientFromSearch();
+    if (!selectedClient) {
+      alert("Wybierz klienta z listy podpowiedzi albo wpisz nazwę tak, żeby pasowała tylko do jednego klienta.");
       $("#orderClientSearch").focus();
       return;
     }
+    setOrderClient(selectedClient.id);
     const orderId = event.currentTarget.elements.id.value;
     await api(orderId ? `/api/orders/${orderId}` : "/api/orders", { method: orderId ? "PUT" : "POST", body: JSON.stringify(orderPayload(event.currentTarget)) });
     resetOrderForm();
@@ -567,11 +715,9 @@ function bindEvents() {
   });
   $("#regionForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const region = await api("/api/regions", { method: "POST", body: JSON.stringify(formData(event.currentTarget)) });
-    state.regions.push(region);
+    await api("/api/regions", { method: "POST", body: JSON.stringify(formData(event.currentTarget)) });
     event.currentTarget.reset();
-    renderSelects();
-    renderSettings();
+    await loadState();
     openView("settings");
   });
   $("#driverForm").addEventListener("submit", async (event) => {
@@ -612,6 +758,11 @@ function bindEvents() {
 
   document.body.addEventListener("click", async (event) => {
     const target = event.target;
+    if ("removeOrderItem" in target.dataset) {
+      target.closest(".order-item-row")?.remove();
+      updateOrderItemRemoveButtons();
+      return;
+    }
     if (target.dataset?.map) window.open(target.dataset.map, "_blank", "noopener");
     if (target.dataset?.moveDelivery) await saveDefaultOrder(target.dataset.moveDelivery, target.dataset.moveDirection);
     if (target.dataset?.assignRegion) {
@@ -662,12 +813,9 @@ function bindEvents() {
       const form = $("#orderForm");
       form.elements.id.value = order.id;
       setOrderClient(order.client_id);
-      form.elements.category_id.value = order.category_id;
-      renderMealSelect();
-      form.elements.meal_id.value = order.meal_id;
+      renderOrderItems(orderItems(order));
       form.elements.start_date.value = order.start_date;
       form.elements.end_date.value = order.end_date;
-      form.elements.quantity.value = order.quantity;
       form.elements.every_other_day.checked = Number(order.interval_days || 0) > 1;
       $$(`#orderForm [name='days']`).forEach((box) => { box.checked = order.days.includes(Number(box.value)); });
       form.elements.custom_dates.value = (order.custom_dates || []).join(", ");
@@ -724,7 +872,7 @@ function bindEvents() {
     if (target.dataset?.deleteOrder) {
       const order = byId(state.orders, target.dataset.deleteOrder);
       const client = order ? clientById(order.client_id) : null;
-      const meal = order ? nameOf(state.meals, order.meal_id, "plan") : "plan";
+      const meal = order ? mealItemsLabel(orderItems(order)) : "plan";
       if (!confirm(`Czy na pewno usunąć plan: ${client?.name || "Klient"} - ${meal}?`)) return;
       await api(`/api/orders/${target.dataset.deleteOrder}`, { method: "DELETE" });
       await loadState();
@@ -733,6 +881,9 @@ function bindEvents() {
 
   document.body.addEventListener("change", async (event) => {
     const target = event.target;
+    if ("orderItemCategory" in target.dataset) {
+      renderOrderItemMealSelect(target.closest(".order-item-row"));
+    }
     if (target.dataset?.orderPosition) {
       await saveDefaultOrderPosition(target.dataset.orderPosition, target.value);
     }

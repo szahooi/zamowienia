@@ -82,7 +82,7 @@
 
     <section id="orders" class="view"><div class="panel"><div class="toolbar"><label>Szukaj w zamówieniach<input id="allOrderSearch" type="search" placeholder="Klient, adres, telefon, numer"></label></div><table class="orders-table"><thead><tr><th>Zamówienie</th><th>Klient</th><th>Porcje</th><th>Dostawa</th></tr></thead><tbody id="orderRows"></tbody></table></div></section>
 
-    <section id="settings" class="view"><div class="grid settings-grid"><section class="panel"><h2>Cennik</h2><div id="priceRows" class="stack"></div><div class="actions"><button id="addPrice" class="secondary">Dodaj pozycję</button></div></section><section class="panel stack"><h2>Import z arkusza</h2><p class="notice">Wybierz plik CSV pobrany z Google Sheets.</p><label>Plik CSV z odpowiedziami<input id="csvFile" type="file" accept=".csv,text/csv"></label><button id="importCsv">Importuj zamówienia</button><p class="notice" id="importNotice"></p></section></div></section>
+    <section id="settings" class="view"><div class="grid settings-grid"><section class="panel"><h2>Cennik</h2><div id="priceRows" class="stack"></div><div class="actions"><button id="addPrice" class="secondary">Dodaj pozycję</button></div></section><section class="panel stack"><h2>Import z CSV</h2><p class="notice">Wybierz plik CSV wyeksportowany z arkusza odpowiedzi.</p><label>Plik CSV<input id="csvFile" type="file" accept=".csv,text/csv"></label><button id="importCsv">Importuj zamówienia</button><p class="notice" id="importNotice"></p></section></div></section>
   </main>
 
   <script>
@@ -179,7 +179,7 @@
     byId("priceRows").addEventListener("input", async e=>{ const id=Number(e.target.dataset.price), f=e.target.dataset.field; if(id&&f){ const item=state.prices.find(p=>p.id===id); item[f]=f==="price"?Number(e.target.value):e.target.value; await api(`/api/prices/${id}`,{method:"PATCH",body:JSON.stringify({[f]:item[f]})}); renderBill(); }});
     byId("priceRows").addEventListener("click", async e=>{ const id=Number(e.target.dataset.deletePrice); if(id&&confirm("Usunąć pozycję z cennika?")){ await api(`/api/prices/${id}`,{method:"DELETE"}); await refresh(); }});
     byId("addPrice").addEventListener("click", async()=>{ const p=await api("/api/prices",{method:"POST",body:JSON.stringify({name:"Nowa pozycja",price:0})}); state.prices.push(p); renderPrices(); renderBill(); });
-    byId("importCsv").addEventListener("click", async()=>{ const file=byId("csvFile").files[0]; if(!file){byId("importNotice").textContent="Wybierz plik CSV.";return;} const form=new FormData(); form.append("file",file); const res=await fetch(appUrl("/api/import/orders"),{method:"POST",body:form}); const data=await res.json(); byId("importNotice").textContent=`Zaimportowano ${data.imported||0} zamówień.`; await refresh(); });
+    byId("importCsv").addEventListener("click", async()=>{ const file=byId("csvFile").files[0]; if(!file){byId("importNotice").textContent="Wybierz plik CSV.";return;} const form=new FormData(); form.append("file",file); byId("importNotice").textContent="Importuję plik CSV..."; const res=await fetch(appUrl("/api/import/orders"),{method:"POST",body:form}); const data=await res.json().catch(()=>({error:"Nie udało się odczytać odpowiedzi importu."})); if(!res.ok){byId("importNotice").textContent=data.error||"Import CSV nie powiódł się.";return;} byId("importNotice").textContent=`Zaimportowano ${data.imported||0} zamówień.`; await refresh(); });
     loadData();
   </script>
 </body>

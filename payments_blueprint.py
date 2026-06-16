@@ -2,8 +2,10 @@
 
 import csv
 import io
+import re
 from datetime import date, datetime
 from decimal import Decimal
+import unicodedata
 
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 
@@ -23,7 +25,6 @@ SEED_PRICES = [
 SEED_PAYMENTS = [
     ("2026-05-28", "ZAM/2026/001", "www www", 236, "GotĂłwka przy odbiorze", "ZapĹ‚acone"),
 ]
-
 
 def register_payments_blueprint(app, db, get_current_user):
     bp = Blueprint("platnosci", __name__, url_prefix="/platnosci")
@@ -134,6 +135,109 @@ def register_payments_blueprint(app, db, get_current_user):
             after=after,
         ))
 
+    def normalize_header(value) -> str:
+        text = unicodedata.normalize("NFKD", str(value or "").strip().lower())
+        text = "".join(char for char in text if not unicodedata.combining(char))
+        return " ".join(text.replace("/", " ").replace("_", " ").replace("-", " ").split())
+
+    def row_value(row: dict, *names: str) -> str:
+        normalized = {}
+        for key, value in row.items():
+            normalized.setdefault(normalize_header(re.sub(r"__\d+$", "", key)), []).append(value)
+        for name in names:
+            for value in normalized.get(normalize_header(name), []):
+                if value not in (None, ""):
+                    return str(value).strip()
+        return ""
+
+    def row_last_value(row: dict, *names: str) -> str:
+        normalized = {}
+        for key, value in row.items():
+            normalized.setdefault(normalize_header(re.sub(r"__\d+$", "", key)), []).append(value)
+        for name in names:
+            values = [value for value in normalized.get(normalize_header(name), []) if value not in (None, "")]
+            if values:
+                return str(values[-1]).strip()
+        return ""
+
+    def fallback_order_no(row: dict) -> str:
+        for value in row.values():
+            text = str(value or "").strip()
+            if re.search(r"\b[A-Z]{2,}/\d{4}/\d+\b", text, flags=re.IGNORECASE):
+                return text
+        return ""
+
+    def decimal_from_text(value) -> float:
+        text = str(value or "").strip().replace(",", ".")
+        try:
+            return float(text)
+        except ValueError:
+            return 0
+
+    def cell_text(value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+        return str(value).strip()
+
+    def parse_csv_rows(raw: bytes) -> list[dict]:
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = raw.decode("cp1250")
+        sample = text[:4096]
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+        except csv.Error:
+            dialect = csv.excel
+        reader = csv.reader(io.StringIO(text), dialect=dialect)
+        rows = list(reader)
+        if not rows:
+            return []
+        headers = [cell_text(header) for header in rows[0]]
+        parsed = []
+        for raw_row in rows[1:]:
+            row = {}
+            for index, header in enumerate(headers):
+                if not header:
+                    continue
+                key = header
+                if key in row:
+                    suffix = 2
+                    while f"{key}__{suffix}" in row:
+                        suffix += 1
+                    key = f"{key}__{suffix}"
+                row[key] = cell_text(raw_row[index]) if index < len(raw_row) else ""
+            if any(row.values()):
+                parsed.append(row)
+        return parsed
+
+    def import_order_rows(rows: list[dict]) -> int:
+        imported = 0
+        for row in rows:
+            order_no = row_value(row, "Nr Zamówienia", "Numer zamówienia", "Nr zamowienia", "Zamówienie", "ID zamówienia") or fallback_order_no(row)
+            client = row_value(row, "Imię i nazwisko / Nazwa firmy", "Imię i nazwisko", "Nazwa firmy", "Klient")
+            if not order_no or not client:
+                continue
+            order = PaymentOrder.query.filter_by(order_no=order_no).first() or PaymentOrder(order_no=order_no, client=client)
+            order.client = client
+            order.created = row_value(row, "Sygnatura czasowa", "Data utworzenia")
+            order.phone = row_value(row, "Numer telefonu kontaktowego", "Telefon", "Numer telefonu")
+            order.email = row_value(row, "Adres e-mail", "Email", "E-mail")
+            order.order_type = row_last_value(row, "Rodzaj zamówienia", "Typ zamówienia", "Rodzaj zamówienia lub proszę opisać zapotrzebowanie w odpowiedzi inne")
+            order.subscription = row_value(row, "Rodzaj Zamówienia / Abonamentu", "Rodzaj abonamentu", "Abonament")
+            order.period = row_value(row, "Okres zamówienia / rozliczenia", "Okres zamówienia", "Okres rozliczenia", "Okres")
+            order.payment_method = row_value(row, "Forma rozliczenia", "Forma płatności", "Metoda płatności")
+            order.start_date = row_value(row, "Data rozpoczęcia abonamentu", "Data rozpoczęcia zamówienia", "Data startu")
+            order.portions = decimal_from_text(row_last_value(row, "Ilość porcji", "Proszę podać przybliżoną ilość osób / porcji", "Liczba porcji", "Porcje"))
+            order.address = row_last_value(row, "Adres dostawy", "Adres")
+            order.notes = row_value(row, "Dodatkowe uwagi do zamówienia", "Uwagi", "Notatki")
+            db.session.add(order)
+            imported += 1
+        db.session.commit()
+        return imported
+
     @bp.before_request
     def guard():
         user = get_current_user()
@@ -242,30 +346,12 @@ def register_payments_blueprint(app, db, get_current_user):
     def import_orders():
         uploaded = request.files.get("file")
         if not uploaded:
-            return jsonify({"error": "missing file"}), 400
-        text = uploaded.read().decode("utf-8-sig")
-        dialect = csv.Sniffer().sniff(text[:2048], delimiters=",;\t")
-        rows = list(csv.DictReader(io.StringIO(text), dialect=dialect))
-        imported = 0
-        for row in rows:
-            order_no = row.get("Nr ZamĂłwienia") or row.get("Numer zamĂłwienia") or ""
-            client = row.get("ImiÄ™ i nazwisko / Nazwa firmy") or ""
-            if not order_no or not client:
-                continue
-            order = PaymentOrder.query.filter_by(order_no=order_no).first() or PaymentOrder(order_no=order_no, client=client)
-            order.client = client
-            order.phone = row.get("Numer telefonu kontaktowego") or ""
-            order.email = row.get("Adres e-mail") or ""
-            order.order_type = row.get("Rodzaj zamĂłwienia") or ""
-            order.subscription = row.get("Rodzaj ZamĂłwienia / Abonamentu") or ""
-            order.period = row.get("Okres zamĂłwienia / rozliczenia") or ""
-            order.payment_method = row.get("Forma rozliczenia") or ""
-            order.start_date = row.get("Data rozpoczÄ™cia abonamentu") or row.get("Data rozpoczÄ™cia zamĂłwienia") or ""
-            order.address = row.get("Adres dostawy") or ""
-            order.notes = row.get("Dodatkowe uwagi do zamĂłwienia") or ""
-            db.session.add(order)
-            imported += 1
-        db.session.commit()
+            return jsonify({"error": "Wybierz plik CSV."}), 400
+        try:
+            rows = parse_csv_rows(uploaded.read())
+            imported = import_order_rows(rows)
+        except UnicodeDecodeError:
+            return jsonify({"error": "Nie udało się odczytać pliku CSV. Zapisz arkusz jako CSV UTF-8."}), 400
         return jsonify({"imported": imported})
 
     def init_payments_db():

@@ -98,6 +98,16 @@ class Order(db.Model):
     notes = db.Column(db.Text, default="")
 
 
+class OrderItem(db.Model):
+    __tablename__ = "order_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=False)
+    meal_id = db.Column(db.Integer, db.ForeignKey("meals.id"), nullable=False)
+    quantity = db.Column(db.Integer, default=1, nullable=False)
+
+
 class DeliveryStatus(db.Model):
     __tablename__ = "delivery_statuses"
 
@@ -199,6 +209,7 @@ def seed_data() -> None:
         ]
     )
     db.session.commit()
+    migrate_order_items()
 
 
 def init_db() -> None:
@@ -228,6 +239,24 @@ def migrate_db() -> None:
         if "excluded_dates_json" not in columns:
             db.session.execute(text("ALTER TABLE orders ADD COLUMN excluded_dates_json TEXT NOT NULL DEFAULT '[]'"))
             db.session.commit()
+    if "orders" in inspector.get_table_names() and "order_items" in inspect(db.engine).get_table_names():
+        migrate_order_items()
+
+
+def migrate_order_items() -> None:
+    existing_item_orders = {row.order_id for row in OrderItem.query.with_entities(OrderItem.order_id).distinct().all()}
+    for order in Order.query.all():
+        if order.id in existing_item_orders:
+            continue
+        db.session.add(
+            OrderItem(
+                order_id=order.id,
+                category_id=order.category_id,
+                meal_id=order.meal_id,
+                quantity=order.quantity,
+            )
+        )
+    db.session.commit()
 
 
 def current_user() -> User | None:
@@ -278,18 +307,31 @@ def user_can_access_client(user: User, client_id: int) -> bool:
 
 
 def order_dict(order: Order) -> dict:
+    items = OrderItem.query.filter_by(order_id=order.id).order_by(OrderItem.id).all()
+    if not items:
+        items = [OrderItem(category_id=order.category_id, meal_id=order.meal_id, quantity=order.quantity)]
+    first_item = items[0]
     return {
         "id": order.id,
         "client_id": order.client_id,
-        "category_id": order.category_id,
-        "meal_id": order.meal_id,
+        "category_id": first_item.category_id,
+        "meal_id": first_item.meal_id,
         "start_date": order.start_date,
         "end_date": order.end_date,
         "days": json_load(order.days_json, []),
         "interval_days": order.interval_days,
         "custom_dates": json_load(order.custom_dates_json, []),
         "excluded_dates": json_load(order.excluded_dates_json, []),
-        "quantity": order.quantity,
+        "quantity": first_item.quantity,
+        "items": [
+            {
+                "id": item.id,
+                "category_id": item.category_id,
+                "meal_id": item.meal_id,
+                "quantity": item.quantity,
+            }
+            for item in items
+        ],
         "notes": order.notes or "",
     }
 
@@ -305,6 +347,40 @@ def applies_on(order: dict, date_text: str) -> bool:
     if int(order["interval_days"] or 0) > 1:
         return (in_range and days_from_start % int(order["interval_days"]) == 0) or date_text in order["custom_dates"]
     return (in_range and weekday in order["days"]) or date_text in order["custom_dates"]
+
+
+def normalized_order_items(payload: dict) -> list[dict]:
+    raw_items = payload.get("items") or [
+        {
+            "category_id": payload.get("category_id"),
+            "meal_id": payload.get("meal_id"),
+            "quantity": payload.get("quantity", 1),
+        }
+    ]
+    items = []
+    for item in raw_items:
+        category_id = int(item.get("category_id") or 0)
+        meal_id = int(item.get("meal_id") or 0)
+        quantity = max(1, int(item.get("quantity") or 1))
+        if not category_id or not meal_id:
+            continue
+        items.append({"category_id": category_id, "meal_id": meal_id, "quantity": quantity})
+    if not items:
+        raise ValueError("Plan musi mieć co najmniej jedną pozycję")
+    return items
+
+
+def save_order_items(order_id: int, items: list[dict]) -> None:
+    OrderItem.query.filter_by(order_id=order_id).delete()
+    for item in items:
+        db.session.add(
+            OrderItem(
+                order_id=order_id,
+                category_id=item["category_id"],
+                meal_id=item["meal_id"],
+                quantity=item["quantity"],
+            )
+        )
 
 
 def serialize_state(user: User) -> dict:
@@ -405,7 +481,9 @@ def logout():
 @app.get("/api/state")
 @login_required
 def state():
-    return jsonify(serialize_state(current_user()))
+    response = jsonify(serialize_state(current_user()))
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.post("/api/admin-password")
@@ -479,6 +557,7 @@ def delete_client(client_id: int):
         if order_ids:
             DeliveryStatus.query.filter(DeliveryStatus.order_id.in_(order_ids)).delete(synchronize_session=False)
             RemovedDelivery.query.filter(RemovedDelivery.order_id.in_(order_ids)).delete(synchronize_session=False)
+            OrderItem.query.filter(OrderItem.order_id.in_(order_ids)).delete(synchronize_session=False)
             Order.query.filter(Order.id.in_(order_ids)).delete(synchronize_session=False)
         DriverDefaultOrder.query.filter_by(client_id=client_id).delete()
         db.session.delete(client)
@@ -490,21 +569,27 @@ def delete_client(client_id: int):
 @admin_required
 def add_order():
     payload = request.get_json(force=True)
-    db.session.add(
-        Order(
-            client_id=payload["client_id"],
-            category_id=payload["category_id"],
-            meal_id=payload["meal_id"],
-            start_date=payload["start_date"],
-            end_date=payload["end_date"],
-            days_json=json_dump(payload.get("days", [])),
-            interval_days=payload.get("interval_days", 0),
-            custom_dates_json=json_dump(payload.get("custom_dates", [])),
-            excluded_dates_json=json_dump(payload.get("excluded_dates", [])),
-            quantity=payload.get("quantity", 1),
-            notes=payload.get("notes", ""),
-        )
+    try:
+        items = normalized_order_items(payload)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    first_item = items[0]
+    order = Order(
+        client_id=payload["client_id"],
+        category_id=first_item["category_id"],
+        meal_id=first_item["meal_id"],
+        start_date=payload["start_date"],
+        end_date=payload["end_date"],
+        days_json=json_dump(payload.get("days", [])),
+        interval_days=payload.get("interval_days", 0),
+        custom_dates_json=json_dump(payload.get("custom_dates", [])),
+        excluded_dates_json=json_dump(payload.get("excluded_dates", [])),
+        quantity=first_item["quantity"],
+        notes=payload.get("notes", ""),
     )
+    db.session.add(order)
+    db.session.flush()
+    save_order_items(order.id, items)
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -516,17 +601,23 @@ def update_order(order_id: int):
     if not order:
         return jsonify({"error": "Nie znaleziono planu"}), 404
     payload = request.get_json(force=True)
+    try:
+        items = normalized_order_items(payload)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    first_item = items[0]
     order.client_id = payload["client_id"]
-    order.category_id = payload["category_id"]
-    order.meal_id = payload["meal_id"]
+    order.category_id = first_item["category_id"]
+    order.meal_id = first_item["meal_id"]
     order.start_date = payload["start_date"]
     order.end_date = payload["end_date"]
     order.days_json = json_dump(payload.get("days", []))
     order.interval_days = payload.get("interval_days", 0)
     order.custom_dates_json = json_dump(payload.get("custom_dates", []))
     order.excluded_dates_json = json_dump(payload.get("excluded_dates", []))
-    order.quantity = payload.get("quantity", 1)
+    order.quantity = first_item["quantity"]
     order.notes = payload.get("notes", "")
+    save_order_items(order.id, items)
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -538,6 +629,7 @@ def delete_order(order_id: int):
     if order:
         DeliveryStatus.query.filter_by(order_id=order_id).delete()
         RemovedDelivery.query.filter_by(order_id=order_id).delete()
+        OrderItem.query.filter_by(order_id=order_id).delete()
         db.session.delete(order)
         db.session.commit()
     return jsonify({"ok": True})

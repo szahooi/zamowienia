@@ -180,6 +180,31 @@
     align-items: end;
   }
 
+  .order-items-wrap {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .order-items {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .order-item-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(5rem, 0.55fr) auto;
+    gap: 0.65rem;
+    align-items: end;
+    padding: 0.75rem;
+    border: 1px solid color-mix(in oklch, oklch(var(--bc)) 14%, transparent);
+    border-radius: 0.65rem;
+    background: color-mix(in oklch, oklch(var(--b1)) 88%, oklch(var(--b2)) 12%);
+  }
+
+  .order-item-remove {
+    width: auto;
+  }
+
   .custom-dates-control {
     min-width: 0;
   }
@@ -217,6 +242,27 @@
   .client-row-actions {
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+
+  .expiring-plan {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.8rem 0.9rem;
+    border: 1px solid color-mix(in oklch, oklch(var(--wa)) 34%, oklch(var(--b3)));
+    border-radius: 0.65rem;
+    background: color-mix(in oklch, oklch(var(--wa)) 14%, oklch(var(--b1)));
+  }
+
+  .expiring-plan-meta {
+    display: grid;
+    justify-items: end;
+    gap: 0.15rem;
+    color: color-mix(in oklch, oklch(var(--bc)) 76%, transparent);
+    font-size: 0.88rem;
+    font-weight: 800;
+    white-space: nowrap;
   }
 
   .settings-stack {
@@ -316,6 +362,12 @@
 
   .driver-meal strong {
     font-weight: 900;
+  }
+
+  .driver-meal-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
   }
 
   .driver-note {
@@ -455,6 +507,16 @@
       flex-direction: column;
     }
 
+    .expiring-plan {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .expiring-plan-meta {
+      justify-items: start;
+      white-space: normal;
+    }
+
     .settings-actions,
     .region-assign-controls {
       justify-content: flex-start;
@@ -486,8 +548,13 @@
 
     .plan-form-grid.three,
     .plan-options-row,
+    .order-item-row,
     .plan-form-actions {
       grid-template-columns: 1fr;
+    }
+
+    .order-item-remove {
+      width: 100%;
     }
 
     .weekday-row {
@@ -510,6 +577,8 @@
     body {
       background: white !important;
       color: black !important;
+      font-size: 16pt !important;
+      line-height: 1.35 !important;
     }
 
     header,
@@ -539,7 +608,9 @@
 
     .kitchen-print-title {
       display: block !important;
-      margin-bottom: 1rem;
+      margin-bottom: 1.2rem;
+      font-size: 22pt !important;
+      line-height: 1.2 !important;
     }
 
     #kitchen .card,
@@ -548,6 +619,28 @@
       border: 0 !important;
       box-shadow: none !important;
       background: white !important;
+    }
+
+    #kitchenReport {
+      display: grid !important;
+      gap: 1.1rem !important;
+    }
+
+    #kitchenReport .card-body {
+      display: grid !important;
+      gap: 0.45rem !important;
+    }
+
+    #kitchenReport h3 {
+      font-size: 18pt !important;
+      line-height: 1.2 !important;
+      margin: 0 0 0.15rem !important;
+    }
+
+    #kitchenReport h3 + div {
+      font-size: 17pt !important;
+      line-height: 1.45 !important;
+      font-weight: 700 !important;
     }
   }
 }

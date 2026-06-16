@@ -56,6 +56,12 @@
               <div id="dashboardKitchen" class="grid gap-3"></div>
             </div>
           </div>
+          <div class="card app-card bg-base-100 shadow mt-4">
+            <div class="card-body">
+              <h2 class="card-title">Kończące się plany</h2>
+              <div id="expiringPlans" class="grid gap-2"></div>
+            </div>
+          </div>
         </section>
 
         <section class="view" id="clients">
@@ -123,20 +129,19 @@
                       <input name="client_id" id="orderClient" type="hidden" required />
                       <datalist id="orderClientOptions"></datalist>
                     </label>
-                    <label class="form-control">
-                      <span class="label-text">Kategoria</span>
-                      <select name="category_id" id="orderCategory" class="select select-bordered" required></select>
-                    </label>
-                    <label class="form-control">
-                      <span class="label-text">Pozycja</span>
-                      <select name="meal_id" id="orderMeal" class="select select-bordered" required></select>
-                    </label>
+                  </div>
+                  <div class="order-items-wrap">
+                    <div class="flex items-center justify-between gap-2">
+                      <strong>Pozycje obiadowe</strong>
+                      <button id="addOrderItem" class="btn btn-outline btn-sm" type="button">Dodaj pozycję</button>
+                    </div>
+                    <div id="orderItems" class="order-items"></div>
                   </div>
                 </section>
 
                 <section class="plan-form-section">
                   <div class="plan-section-title"><span>2</span><strong>Harmonogram</strong></div>
-                  <div class="plan-form-grid three">
+                  <div class="plan-form-grid">
                     <label class="form-control">
                       <span class="label-text">Od dnia</span>
                       <input name="start_date" type="date" class="input input-bordered" required />
@@ -144,10 +149,6 @@
                     <label class="form-control">
                       <span class="label-text">Do dnia</span>
                       <input name="end_date" type="date" class="input input-bordered" required />
-                    </label>
-                    <label class="form-control">
-                      <span class="label-text">Ilość porcji</span>
-                      <input name="quantity" type="number" min="1" value="1" class="input input-bordered" required />
                     </label>
                   </div>
                   <div class="weekday-row" aria-label="Dni tygodnia">
