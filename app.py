@@ -383,6 +383,35 @@ def save_order_items(order_id: int, items: list[dict]) -> None:
         )
 
 
+def preserve_region_order_for_driver(region_id: int, driver_id: int) -> None:
+    clients = Client.query.filter_by(region_id=region_id).order_by(Client.name).all()
+    if not clients:
+        return
+
+    client_ids = [client.id for client in clients]
+    order_rows = DriverDefaultOrder.query.filter(DriverDefaultOrder.client_id.in_(client_ids)).all()
+    old_positions = {(row.driver_id, row.client_id): row.position for row in order_rows}
+
+    moved_client_ids = [
+        client.id
+        for client in sorted(
+            clients,
+            key=lambda client: (
+                old_positions.get((client.driver_id, client.id), 999999),
+                client.name.lower(),
+            ),
+        )
+    ]
+
+    existing_rows = DriverDefaultOrder.query.filter_by(driver_id=driver_id).order_by(DriverDefaultOrder.position).all()
+    existing_client_ids = [row.client_id for row in existing_rows if row.client_id not in moved_client_ids]
+    merged_client_ids = existing_client_ids + moved_client_ids
+
+    DriverDefaultOrder.query.filter_by(driver_id=driver_id).delete()
+    for position, client_id in enumerate(merged_client_ids):
+        db.session.add(DriverDefaultOrder(driver_id=driver_id, client_id=client_id, position=position))
+
+
 def serialize_state(user: User) -> dict:
     clients_query = Client.query
     orders_query = Order.query
@@ -679,6 +708,7 @@ def assign_region_driver(region_id: int):
     driver = db.session.get(Driver, payload.get("driver_id"))
     if not region or not driver:
         return jsonify({"error": "Nie znaleziono rejonu albo kierowcy"}), 404
+    preserve_region_order_for_driver(region_id, driver.id)
     region.driver_id = driver.id
     Client.query.filter_by(region_id=region_id).update({"driver_id": driver.id})
     db.session.commit()
