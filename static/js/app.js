@@ -129,16 +129,27 @@ function orderedDriverEntries(driverId, dateText) {
     .sort((a, b) => {
       const ai = savedOrder.indexOf(a.client.id);
       const bi = savedOrder.indexOf(b.client.id);
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.client.name.localeCompare(b.client.name, "pl");
+      if (ai === -1 && bi === -1) return a.client.name.localeCompare(b.client.name, "pl");
+      if (ai === -1) return -1;
+      if (bi === -1) return 1;
+      return ai - bi || a.client.name.localeCompare(b.client.name, "pl");
     });
 }
 
 function mergeDefaultOrder(driverId, visibleClientIds) {
   const savedOrder = defaultClientOrder(driverId);
-  return [
-    ...visibleClientIds,
-    ...savedOrder.filter((clientId) => !visibleClientIds.includes(clientId))
-  ];
+  const newClientIds = visibleClientIds.filter((clientId) => !savedOrder.includes(clientId));
+  const baseOrder = [...newClientIds, ...savedOrder];
+  const visibleSet = new Set(visibleClientIds);
+  let visibleIndex = 0;
+  const merged = baseOrder.map((clientId) => {
+    if (!visibleSet.has(clientId)) return clientId;
+    const replacement = visibleClientIds[visibleIndex];
+    visibleIndex += 1;
+    return replacement;
+  });
+  visibleClientIds.slice(visibleIndex).forEach((clientId) => merged.push(clientId));
+  return merged.filter((clientId, index) => merged.indexOf(clientId) === index);
 }
 
 function appliesOn(order, dateText) {

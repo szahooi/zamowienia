@@ -403,7 +403,13 @@ def preserve_region_order_for_driver(region_id: int, driver_id: int) -> None:
         )
     ]
 
-    existing_rows = DriverDefaultOrder.query.filter_by(driver_id=driver_id).order_by(DriverDefaultOrder.position).all()
+    existing_rows = (
+        DriverDefaultOrder.query
+        .join(Client, Client.id == DriverDefaultOrder.client_id)
+        .filter(DriverDefaultOrder.driver_id == driver_id, Client.driver_id == driver_id)
+        .order_by(DriverDefaultOrder.position)
+        .all()
+    )
     existing_client_ids = [row.client_id for row in existing_rows if row.client_id not in moved_client_ids]
     merged_client_ids = existing_client_ids + moved_client_ids
 
