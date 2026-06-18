@@ -122,8 +122,97 @@ def register_payments_blueprint(app, db, get_current_user):
                 "after": self.after,
             }
 
+    class PaymentBill(db.Model):
+        __tablename__ = "payment_bills"
+
+        id = db.Column(db.Integer, primary_key=True)
+        payment_id = db.Column(db.Integer, nullable=False, unique=True, index=True)
+        issue_date = db.Column(db.String(20), nullable=False)
+        order_no = db.Column(db.String(40), nullable=False, index=True)
+        client = db.Column(db.String(180), nullable=False)
+        address = db.Column(db.Text, default="")
+        method = db.Column(db.String(120), default="")
+        discount = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+        total = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+        def to_dict(self):
+            items = PaymentBillItem.query.filter_by(bill_id=self.id).order_by(PaymentBillItem.id).all()
+            return {
+                "id": self.id,
+                "paymentId": self.payment_id,
+                "date": self.issue_date,
+                "orderNo": self.order_no,
+                "client": self.client,
+                "address": self.address or "",
+                "method": self.method or "",
+                "discount": float(self.discount),
+                "total": float(self.total),
+                "items": [item.to_dict() for item in items],
+            }
+
+    class PaymentBillItem(db.Model):
+        __tablename__ = "payment_bill_items"
+
+        id = db.Column(db.Integer, primary_key=True)
+        bill_id = db.Column(db.Integer, nullable=False, index=True)
+        name = db.Column(db.String(200), nullable=False)
+        quantity = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+        unit_price = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+        amount = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+
+        def to_dict(self):
+            return {
+                "id": self.id,
+                "name": self.name,
+                "qty": float(self.quantity),
+                "price": float(self.unit_price),
+                "amount": float(self.amount),
+            }
+
     def decimal_amount(value) -> Decimal:
         return Decimal(str(value or 0)).quantize(Decimal("0.01"))
+
+    def payment_dict(payment):
+        data = payment.to_dict()
+        bill = PaymentBill.query.filter_by(payment_id=payment.id).first()
+        data["billId"] = bill.id if bill else None
+        return data
+
+    def delete_payment_bill(payment_id: int) -> None:
+        bill = PaymentBill.query.filter_by(payment_id=payment_id).first()
+        if not bill:
+            return
+        PaymentBillItem.query.filter_by(bill_id=bill.id).delete()
+        db.session.delete(bill)
+
+    def save_payment_bill(payment, data: dict) -> PaymentBill:
+        bill_data = data.get("bill") or {}
+        bill = PaymentBill(
+            payment_id=payment.id,
+            issue_date=payment.payment_date,
+            order_no=payment.order_no,
+            client=payment.client,
+            address=bill_data.get("address") or "",
+            method=payment.method,
+            discount=decimal_amount(bill_data.get("discount")),
+            total=payment.amount,
+        )
+        db.session.add(bill)
+        db.session.flush()
+        for raw_item in bill_data.get("items") or []:
+            quantity = decimal_amount(raw_item.get("qty"))
+            unit_price = decimal_amount(raw_item.get("price"))
+            if quantity <= 0:
+                continue
+            db.session.add(PaymentBillItem(
+                bill_id=bill.id,
+                name=str(raw_item.get("name") or "Pozycja"),
+                quantity=quantity,
+                unit_price=unit_price,
+                amount=decimal_amount(quantity * unit_price),
+            ))
+        return bill
 
     def log_payment(action, payment=None, before="", after=""):
         db.session.add(PaymentLog(
@@ -259,7 +348,7 @@ def register_payments_blueprint(app, db, get_current_user):
         return jsonify({
             "orders": [row.to_dict() for row in PaymentOrder.query.order_by(PaymentOrder.order_no).all()],
             "prices": [row.to_dict() for row in PaymentPrice.query.order_by(PaymentPrice.id).all()],
-            "payments": [row.to_dict() for row in PaymentEntry.query.order_by(PaymentEntry.payment_date.desc(), PaymentEntry.id.desc()).all()],
+            "payments": [payment_dict(row) for row in PaymentEntry.query.order_by(PaymentEntry.payment_date.desc(), PaymentEntry.id.desc()).all()],
         })
 
     @bp.route("/api/prices", methods=["POST"])
@@ -299,9 +388,17 @@ def register_payments_blueprint(app, db, get_current_user):
         )
         db.session.add(item)
         db.session.flush()
+        save_payment_bill(item, data)
         log_payment("create", item, after=str(item.to_dict()))
         db.session.commit()
-        return jsonify(item.to_dict())
+        return jsonify(payment_dict(item))
+
+    @bp.route("/api/payments/<int:payment_id>/bill")
+    def payment_bill(payment_id):
+        bill = PaymentBill.query.filter_by(payment_id=payment_id).first()
+        if not bill:
+            return jsonify({"error": "Rachunek nie jest dostępny"}), 404
+        return jsonify(bill.to_dict())
 
     @bp.route("/api/payments/<int:payment_id>", methods=["PATCH", "DELETE"])
     def payment_detail(payment_id):
@@ -311,6 +408,7 @@ def register_payments_blueprint(app, db, get_current_user):
         before = str(item.to_dict())
         if request.method == "DELETE":
             log_payment("delete", item, before=before)
+            delete_payment_bill(item.id)
             db.session.delete(item)
             db.session.commit()
             return jsonify({"ok": True})
@@ -321,7 +419,7 @@ def register_payments_blueprint(app, db, get_current_user):
             item.amount = decimal_amount(data["amount"])
         log_payment("update", item, before=before, after=str(item.to_dict()))
         db.session.commit()
-        return jsonify(item.to_dict())
+        return jsonify(payment_dict(item))
 
     @bp.route("/api/payments/delete-paid", methods=["POST"])
     def delete_paid():
@@ -334,6 +432,7 @@ def register_payments_blueprint(app, db, get_current_user):
         items = query.all()
         for item in items:
             log_payment("delete-paid", item, before=str(item.to_dict()))
+            delete_payment_bill(item.id)
             db.session.delete(item)
         db.session.commit()
         return jsonify({"deleted": len(items)})
