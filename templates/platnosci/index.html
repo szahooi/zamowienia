@@ -126,10 +126,24 @@
     }
     function renderBill() {
       const options = state.prices.map(p => `<option value="${p.id}">${esc(p.name)} (${money.format(p.price)})</option>`).join("");
-      byId("billLines").innerHTML = state.bill.lines.map((l,i) => `<div class="line"><label>${i===0?"Abonament / pozycja":`Dodatkowa pozycja ${i}`}<select data-line="${i}" data-field="priceId">${options}</select></label><label>Ilość<input data-line="${i}" data-field="qty" type="number" min="0" step="0.5" value="${Number(l.qty)||0}"></label><div class="amount">${money.format(priceById(l.priceId).price)}</div><div class="amount">${money.format(priceById(l.priceId).price*(Number(l.qty)||0))}</div><button class="icon-button danger" data-remove-line="${i}" type="button">×</button></div>`).join("");
+      byId("billLines").innerHTML = state.bill.lines.map((l,i) => `<div class="line"><label>${i===0?"Abonament / pozycja":`Dodatkowa pozycja ${i}`}<select data-line="${i}" data-field="priceId">${options}</select></label><label>Ilość<input data-line="${i}" data-field="qty" type="number" min="0" step="1" value="${Number(l.qty)||0}"></label><div class="amount" data-line-price="${i}"></div><div class="amount" data-line-total="${i}"></div><button class="icon-button danger" data-remove-line="${i}" type="button">×</button></div>`).join("");
       state.bill.lines.forEach((l,i) => { const el = document.querySelector(`select[data-line="${i}"]`); if (el) el.value = l.priceId; });
-      byId("customLines").innerHTML = state.bill.customLines.map((l,i) => `<div class="line"><label>Nazwa<input data-custom="${i}" data-field="name" value="${esc(l.name)}"></label><label>Ilość<input data-custom="${i}" data-field="qty" type="number" min="0" step="0.5" value="${Number(l.qty)||0}"></label><label>Cena<input data-custom="${i}" data-field="price" type="number" min="0" step="0.01" value="${Number(l.price)||0}"></label><div class="amount">${money.format((Number(l.price)||0)*(Number(l.qty)||0))}</div><button class="icon-button danger" data-remove-custom="${i}" type="button">×</button></div>`).join("");
+      byId("customLines").innerHTML = state.bill.customLines.map((l,i) => `<div class="line"><label>Nazwa<input data-custom="${i}" data-field="name" value="${esc(l.name)}"></label><label>Ilość<input data-custom="${i}" data-field="qty" type="number" min="0" step="1" value="${Number(l.qty)||0}"></label><label>Cena<input data-custom="${i}" data-field="price" type="number" min="0" step="0.01" value="${Number(l.price)||0}"></label><div class="amount" data-custom-total="${i}"></div><button class="icon-button danger" data-remove-custom="${i}" type="button">×</button></div>`).join("");
       byId("discount").value = state.bill.discount || 0;
+      updateBillTotals();
+    }
+    function updateBillTotals() {
+      state.bill.lines.forEach((line,i) => {
+        const price = priceById(line.priceId).price;
+        const priceEl = document.querySelector(`[data-line-price="${i}"]`);
+        const totalEl = document.querySelector(`[data-line-total="${i}"]`);
+        if (priceEl) priceEl.textContent = money.format(price);
+        if (totalEl) totalEl.textContent = money.format(price * (Number(line.qty)||0));
+      });
+      state.bill.customLines.forEach((line,i) => {
+        const totalEl = document.querySelector(`[data-custom-total="${i}"]`);
+        if (totalEl) totalEl.textContent = money.format((Number(line.price)||0) * (Number(line.qty)||0));
+      });
       byId("billTotal").textContent = money.format(billTotal());
     }
     function filteredPayments() {
@@ -158,13 +172,14 @@
     document.querySelectorAll(".tab[data-view]").forEach(tab => tab.addEventListener("click",()=>{document.querySelectorAll(".tab,.view").forEach(el=>el.classList.remove("active")); tab.classList.add("active"); byId(tab.dataset.view).classList.add("active");}));
     byId("paymentsLogout").addEventListener("click", async()=>{ await fetch("/api/logout", { method:"POST", headers:{ "Content-Type":"application/json" }, body:"{}" }); window.location.href = "/"; });
     byId("orderSearch").addEventListener("input", renderOrderSelect); byId("orderSelect").addEventListener("change", renderOrderSummary);
-    byId("billLines").addEventListener("input", e => { const i=Number(e.target.dataset.line), f=e.target.dataset.field; if(Number.isInteger(i)&&f){ state.bill.lines[i][f]=f==="qty"?Number(e.target.value):Number(e.target.value); renderBill(); }});
+    byId("billLines").addEventListener("input", e => { const i=Number(e.target.dataset.line), f=e.target.dataset.field; if(Number.isInteger(i)&&f==="qty"){ state.bill.lines[i].qty=e.target.value===""?"":Number(e.target.value); updateBillTotals(); }});
+    byId("billLines").addEventListener("change", e => { const i=Number(e.target.dataset.line), f=e.target.dataset.field; if(Number.isInteger(i)&&f==="priceId"){ state.bill.lines[i].priceId=Number(e.target.value); updateBillTotals(); }});
     byId("billLines").addEventListener("click", e => { const i=Number(e.target.dataset.removeLine); if(Number.isInteger(i)){ state.bill.lines.splice(i,1); if(!state.bill.lines.length) state.bill.lines.push({priceId:state.prices[0]?.id,qty:0}); renderBill(); }});
-    byId("customLines").addEventListener("input", e => { const i=Number(e.target.dataset.custom), f=e.target.dataset.field; if(Number.isInteger(i)&&f){ state.bill.customLines[i][f]=f==="name"?e.target.value:Number(e.target.value); renderBill(); }});
+    byId("customLines").addEventListener("input", e => { const i=Number(e.target.dataset.custom), f=e.target.dataset.field; if(Number.isInteger(i)&&f){ state.bill.customLines[i][f]=f==="name"?e.target.value:(e.target.value===""?"":Number(e.target.value)); updateBillTotals(); }});
     byId("customLines").addEventListener("click", e => { const i=Number(e.target.dataset.removeCustom); if(Number.isInteger(i)){ state.bill.customLines.splice(i,1); if(!state.bill.customLines.length) state.bill.customLines.push({name:"",qty:0,price:0}); renderBill(); }});
     byId("addBillLine").addEventListener("click",()=>{state.bill.lines.push({priceId:state.prices[0]?.id,qty:0}); renderBill();});
     byId("addCustomLine").addEventListener("click",()=>{state.bill.customLines.push({name:"",qty:0,price:0}); renderBill();});
-    byId("discount").addEventListener("input",e=>{state.bill.discount=Number(e.target.value); renderBill();});
+    byId("discount").addEventListener("input",e=>{state.bill.discount=e.target.value===""?"":Number(e.target.value); updateBillTotals();});
     byId("clearBill").addEventListener("click",()=>{state.bill={lines:[{priceId:state.prices[0]?.id,qty:0}],customLines:[{name:"",qty:0,price:0}],discount:0}; renderBill();});
     byId("savePayment").addEventListener("click", async()=>{ const o=selectedOrder(); const p=await api("/api/payments",{method:"POST",body:JSON.stringify({date:new Date().toISOString().slice(0,10),orderNo:o.orderNo,client:o.client,amount:billTotal(),method:o.paymentMethod,status:"Oczekuje"})}); state.payments.unshift(p); renderPayments(); byId("billNotice").textContent=`Zaksięgowano rachunek ${o.orderNo} na kwotę ${money.format(billTotal())}.`; });
     byId("printBill").addEventListener("click",()=>{ const o=selectedOrder(); const rows=billItems().map(i=>`<tr><td>${esc(i.name)}</td><td class="num">${i.qty}</td><td class="num">${money.format(i.price)}</td><td class="num">${money.format(i.amount)}</td></tr>`).join(""); printDocument(`Rachunek ${o.orderNo}`,`<div class="top"><div><h1>Rachunek</h1><div>${esc(o.orderNo)} | ${new Date().toLocaleDateString("pl-PL")}</div></div><div>Format A5</div></div><section class="box"><b>${esc(o.client)}</b><br>${esc(o.address||"-")}<br>${esc(o.paymentMethod||"-")}</section><section class="box"><table><thead><tr><th>Nazwa</th><th class="num">Ilość</th><th class="num">Cena</th><th class="num">Wartość</th></tr></thead><tbody>${rows}</tbody></table><div class="total"><span>Do zapłaty</span><span>${money.format(billTotal())}</span></div></section><div class="signature"><div class="signature-box"><div class="signature-line"></div>Podpis wystawiającego</div></div>`); });
