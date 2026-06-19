@@ -397,20 +397,31 @@ def preserve_region_order_for_driver(region_id: int, driver_id: int) -> None:
         for client in sorted(
             clients,
             key=lambda client: (
-                old_positions.get((client.driver_id, client.id), 999999),
+                client.driver_id,
+                0 if (client.driver_id, client.id) not in old_positions else 1,
+                old_positions.get((client.driver_id, client.id), 0),
                 client.name.lower(),
             ),
         )
     ]
 
-    existing_rows = (
-        DriverDefaultOrder.query
-        .join(Client, Client.id == DriverDefaultOrder.client_id)
-        .filter(DriverDefaultOrder.driver_id == driver_id, Client.driver_id == driver_id)
-        .order_by(DriverDefaultOrder.position)
-        .all()
-    )
-    existing_client_ids = [row.client_id for row in existing_rows if row.client_id not in moved_client_ids]
+    destination_clients = Client.query.filter_by(driver_id=driver_id).all()
+    destination_positions = {
+        row.client_id: row.position
+        for row in DriverDefaultOrder.query.filter_by(driver_id=driver_id).all()
+    }
+    existing_client_ids = [
+        client.id
+        for client in sorted(
+            destination_clients,
+            key=lambda client: (
+                0 if client.id not in destination_positions else 1,
+                destination_positions.get(client.id, 0),
+                client.name.lower(),
+            ),
+        )
+        if client.id not in moved_client_ids
+    ]
     merged_client_ids = existing_client_ids + moved_client_ids
 
     DriverDefaultOrder.query.filter_by(driver_id=driver_id).delete()
@@ -714,6 +725,9 @@ def assign_region_driver(region_id: int):
     driver = db.session.get(Driver, payload.get("driver_id"))
     if not region or not driver:
         return jsonify({"error": "Nie znaleziono rejonu albo kierowcy"}), 404
+    region_clients = Client.query.filter_by(region_id=region_id).all()
+    if region.driver_id == driver.id and all(client.driver_id == driver.id for client in region_clients):
+        return jsonify({"ok": True})
     preserve_region_order_for_driver(region_id, driver.id)
     region.driver_id = driver.id
     Client.query.filter_by(region_id=region_id).update({"driver_id": driver.id})
