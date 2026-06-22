@@ -22,7 +22,7 @@
     .tabs { display:flex; gap:8px; flex-wrap:wrap; }
     .tab { background:white; color:var(--ink); border:1px solid var(--line); }
     .tab.active { background:var(--accent); color:white; border-color:var(--accent); }
-    main { max-width:1280px; margin:0 auto; padding:18px; }
+    main { max-width:1500px; margin:0 auto; padding:18px; }
     .view { display:none; }
     .view.active { display:block; }
     .grid { display:grid; grid-template-columns:minmax(300px,410px) minmax(0,1fr); gap:16px; align-items:start; }
@@ -58,6 +58,18 @@
     .status.bad { color:var(--bad); background:#fee4e2; }
     .payment-actions { display:flex; gap:6px; align-items:center; white-space:nowrap; }
     .payment-actions select { width:132px; min-height:34px; padding:6px 8px; }
+    .payment-actions button.secondary { min-height:34px; padding:0 9px; font-size:12px; }
+    .payments-panel { overflow-x:auto; }
+    .payments-table { min-width:1080px; }
+    .payments-table th,.payments-table td { overflow-wrap:normal; }
+    .payments-table th:nth-child(1),.payments-table td:nth-child(1),
+    .payments-table th:nth-child(2),.payments-table td:nth-child(2),
+    .payments-table th:nth-child(4),.payments-table td:nth-child(4),
+    .payments-table th:nth-child(5),.payments-table td:nth-child(5),
+    .payments-table th:nth-child(6),.payments-table td:nth-child(6),
+    .payments-table th:nth-child(7),.payments-table td:nth-child(7) { white-space:nowrap; }
+    .payments-table th:nth-child(1){width:92px}.payments-table th:nth-child(2){width:135px}.payments-table th:nth-child(4){width:105px}.payments-table th:nth-child(5){width:150px}.payments-table th:nth-child(6){width:105px}.payments-table th:nth-child(7){width:350px}
+    .payments-table .status { white-space:nowrap; }
     .icon-button { width:34px; min-width:34px; min-height:34px; padding:0; font-size:18px; line-height:1; }
     .orders-table { table-layout:fixed; }
     .orders-table th:nth-child(1){width:24%}.orders-table th:nth-child(2){width:25%}.orders-table th:nth-child(3){width:80px}
@@ -67,7 +79,7 @@
     .order-address { line-height:1.35; overflow-wrap:anywhere; }
     .order-portions { font-weight:850; text-align:center; white-space:nowrap; }
     .price-row { grid-template-columns:minmax(260px,1fr) 150px auto; align-items:end; }
-    @media(max-width:900px){ .topbar{align-items:stretch;flex-direction:column}.grid,.row,.numbers,.settings-grid{grid-template-columns:1fr}.line{grid-template-columns:1fr 1fr}.amount{text-align:left;padding-bottom:0} table,thead,tbody,th,td,tr{display:block} thead{display:none} tr{border-bottom:1px solid var(--line);padding:9px 0} td{border:0;display:grid;grid-template-columns:110px 1fr;gap:8px;padding:6px 10px} td::before{content:attr(data-label);color:var(--muted);font-weight:800;font-size:12px}.order-portions{text-align:left} }
+    @media(max-width:900px){ .topbar{align-items:stretch;flex-direction:column}.grid,.row,.numbers,.settings-grid{grid-template-columns:1fr}.line{grid-template-columns:1fr 1fr}.amount{text-align:left;padding-bottom:0} table,thead,tbody,th,td,tr{display:block} thead{display:none} tr{border-bottom:1px solid var(--line);padding:9px 0} td{border:0;display:grid;grid-template-columns:110px 1fr;gap:8px;padding:6px 10px} td::before{content:attr(data-label);color:var(--muted);font-weight:800;font-size:12px}.order-portions{text-align:left}.payments-table{min-width:0}.payments-table td{white-space:normal!important}.payment-actions{flex-wrap:wrap} }
   </style>
 </head>
 <body>
@@ -78,7 +90,7 @@
       <section class="panel"><h2>Rachunek</h2><p class="bill-subtitle">Pozycje z cennika</p><div class="lines" id="billLines"></div><button class="secondary" id="addBillLine" type="button">Dodaj kolejną pozycję z cennika</button><p class="bill-subtitle">Pozycje niestandardowe</p><div class="lines" id="customLines"></div><button class="secondary" id="addCustomLine" type="button">Dodaj pozycję niestandardową</button><div class="row" style="margin-top:12px"><label>Rabat<input id="discount" type="number" min="0" step="0.01" value="0"></label></div><div class="total"><span>Suma</span><output id="billTotal">0,00 zł</output></div><div class="row" style="margin-top:14px"><label>Do kiedy (opcjonalnie)<input id="paidUntil" type="date"></label></div><div class="actions"><button id="savePayment">Zaksięguj</button><button class="ghost" id="clearBill">Wyczyść rachunek</button></div><p class="notice" id="billNotice"></p></section>
     </div></section>
 
-    <section id="payments" class="view"><div class="numbers" id="paymentMetrics"></div><div class="panel"><div class="toolbar"><label>Filtr<input id="paymentSearch" type="search" placeholder="Klient, numer zamówienia lub metoda"></label><label>Status<select id="statusFilter"><option value="">Wszystkie</option><option>Oczekuje</option><option>Częściowo</option><option>Zapłacone</option><option>Anulowane</option></select></label><label>Od<input id="paymentDateFrom" type="date"></label><label>Do<input id="paymentDateTo" type="date"></label><button class="secondary" id="printPayments">Podsumowanie PDF</button><button class="secondary" id="downloadLogs">Pobierz logi CSV</button><button class="ghost" id="clearPaymentDates">Wyczyść daty</button><button class="danger" id="deletePaidPayments">Usuń zapłacone</button></div><table><thead><tr><th>Data</th><th>Nr</th><th>Klient</th><th>Kwota</th><th>Metoda</th><th>Status</th><th>Akcje</th></tr></thead><tbody id="paymentRows"></tbody></table></div></section>
+    <section id="payments" class="view"><div class="numbers" id="paymentMetrics"></div><div class="panel payments-panel"><div class="toolbar"><label>Filtr<input id="paymentSearch" type="search" placeholder="Klient, numer zamówienia lub metoda"></label><label>Status<select id="statusFilter"><option value="">Wszystkie</option><option>Oczekuje</option><option>Częściowo</option><option>Zapłacone</option><option>Anulowane</option></select></label><label>Od<input id="paymentDateFrom" type="date"></label><label>Do<input id="paymentDateTo" type="date"></label><button class="secondary" id="printPayments">Podsumowanie PDF</button><button class="secondary" id="downloadLogs">Pobierz logi CSV</button><button class="ghost" id="clearPaymentDates">Wyczyść daty</button><button class="danger" id="deletePaidPayments">Usuń zapłacone</button></div><table class="payments-table"><thead><tr><th>Data</th><th>Nr</th><th>Klient</th><th>Kwota</th><th>Metoda</th><th>Status</th><th>Akcje</th></tr></thead><tbody id="paymentRows"></tbody></table></div></section>
 
     <section id="orders" class="view"><div class="panel"><div class="toolbar"><label>Szukaj w zamówieniach<input id="allOrderSearch" type="search" placeholder="Klient, adres, telefon, numer"></label></div><table class="orders-table"><thead><tr><th>Zamówienie</th><th>Klient</th><th>Porcje</th><th>Dostawa</th></tr></thead><tbody id="orderRows"></tbody></table></div></section>
 
