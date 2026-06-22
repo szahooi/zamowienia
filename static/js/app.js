@@ -308,7 +308,7 @@ function renderAccess() {
 function renderDashboard() {
   const tomorrow = iso(addDays(new Date(), 1));
   $("#clientCount").textContent = state.clients.filter((client) => client.active).length;
-  $("#planCount").textContent = state.orders.length;
+  $("#planCount").textContent = state.orders.filter((order) => clientById(order.client_id)?.active).length;
   $("#tomorrowCount").textContent = deliveriesFor(tomorrow).length;
   $("#regionCount").textContent = state.regions.length;
   renderKitchenInto("#dashboardKitchen", tomorrow);
@@ -412,6 +412,9 @@ function renderKitchen() {
 
 function renderOrders() {
   const search = ($("#orderSearch")?.value || "").trim().toLowerCase();
+  const endedCount = state.orders.filter((order) => order.end_date < iso(new Date())).length;
+  $("#deleteEndedOrders").disabled = endedCount === 0;
+  $("#deleteEndedOrders").title = endedCount ? `Zakończone plany: ${endedCount}` : "Brak zakończonych planów";
   const orders = state.orders.filter((order) => {
     const client = clientById(order.client_id);
     return !search || (client?.name || "").toLowerCase().includes(search);
@@ -419,12 +422,16 @@ function renderOrders() {
   $("#ordersList").innerHTML = orders.length ? orders.map((order) => {
     const client = clientById(order.client_id);
     const items = orderItems(order);
+    const suspended = !client?.active;
     const days = Number(order.interval_days || 0) > 1 ? `co ${order.interval_days} dzień` : order.days.length ? order.days.map((day) => ["Nd", "Pon", "Wt", "Śr", "Czw", "Pt", "Sob"][day]).join(", ") : "daty wybrane";
     return `
       <article class="card app-card bg-base-100 border"><div class="card-body">
         <div class="flex justify-between gap-2">
           <strong>${client?.name || "Klient"} - ${mealItemsLabel(items)}</strong>
-          <span class="badge">${client ? nameOf(state.regions, client.region_id, "-") : "-"}</span>
+          <div class="flex flex-wrap gap-2">
+            ${suspended ? `<span class="badge badge-error">Plan zawieszony</span>` : `<span class="badge badge-success">Plan aktywny</span>`}
+            <span class="badge">${client ? nameOf(state.regions, client.region_id, "-") : "-"}</span>
+          </div>
         </div>
         <div class="plan-dates">
           <span>${order.start_date} - ${order.end_date}</span>
@@ -689,6 +696,14 @@ function bindEvents() {
   $("#orderCancelEdit").addEventListener("click", resetOrderForm);
   $("#driverCancelEdit").addEventListener("click", resetDriverForm);
   $("#addOrderItem").addEventListener("click", () => addOrderItemRow({}));
+  $("#deleteEndedOrders").addEventListener("click", async () => {
+    const endedCount = state.orders.filter((order) => order.end_date < iso(new Date())).length;
+    if (!endedCount) return;
+    if (!confirm(`Czy na pewno usunąć wszystkie zakończone plany (${endedCount})? Tej operacji nie można cofnąć.`)) return;
+    const result = await api("/api/orders/cleanup-ended", { method: "POST", body: "{}" });
+    await loadState();
+    alert(`Usunięto zakończone plany: ${result.deleted}.`);
+  });
   $("#cleanupDeliveries").addEventListener("click", async () => {
     const dateTo = $("#cleanupDate").value;
     if (!dateTo) return;

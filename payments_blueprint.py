@@ -8,6 +8,7 @@ from decimal import Decimal
 import unicodedata
 
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
+from sqlalchemy import inspect, text
 
 
 SEED_ORDERS = [
@@ -132,6 +133,7 @@ def register_payments_blueprint(app, db, get_current_user):
         client = db.Column(db.String(180), nullable=False)
         address = db.Column(db.Text, default="")
         method = db.Column(db.String(120), default="")
+        paid_until = db.Column(db.String(20), nullable=False, default="")
         discount = db.Column(db.Numeric(10, 2), nullable=False, default=0)
         total = db.Column(db.Numeric(10, 2), nullable=False, default=0)
         created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -146,6 +148,7 @@ def register_payments_blueprint(app, db, get_current_user):
                 "client": self.client,
                 "address": self.address or "",
                 "method": self.method or "",
+                "paidUntil": self.paid_until or "",
                 "discount": float(self.discount),
                 "total": float(self.total),
                 "items": [item.to_dict() for item in items],
@@ -195,6 +198,7 @@ def register_payments_blueprint(app, db, get_current_user):
             client=payment.client,
             address=bill_data.get("address") or "",
             method=payment.method,
+            paid_until=bill_data.get("paidUntil") or "",
             discount=decimal_amount(bill_data.get("discount")),
             total=payment.amount,
         )
@@ -454,6 +458,12 @@ def register_payments_blueprint(app, db, get_current_user):
         return jsonify({"imported": imported})
 
     def init_payments_db():
+        inspector = inspect(db.engine)
+        if "payment_bills" in inspector.get_table_names():
+            columns = {column["name"] for column in inspector.get_columns("payment_bills")}
+            if "paid_until" not in columns:
+                db.session.execute(text("ALTER TABLE payment_bills ADD COLUMN paid_until VARCHAR(20) NOT NULL DEFAULT ''"))
+                db.session.commit()
         if not PaymentOrder.query.first():
             db.session.add_all(PaymentOrder(**row) for row in SEED_ORDERS)
         if not PaymentPrice.query.first():

@@ -640,6 +640,20 @@ def add_order():
     return jsonify({"ok": True})
 
 
+@app.post("/api/orders/cleanup-ended")
+@admin_required
+def cleanup_ended_orders():
+    order_ids = [row.id for row in Order.query.filter(Order.end_date < date.today().isoformat()).all()]
+    if not order_ids:
+        return jsonify({"deleted": 0})
+    DeliveryStatus.query.filter(DeliveryStatus.order_id.in_(order_ids)).delete(synchronize_session=False)
+    RemovedDelivery.query.filter(RemovedDelivery.order_id.in_(order_ids)).delete(synchronize_session=False)
+    OrderItem.query.filter(OrderItem.order_id.in_(order_ids)).delete(synchronize_session=False)
+    Order.query.filter(Order.id.in_(order_ids)).delete(synchronize_session=False)
+    db.session.commit()
+    return jsonify({"deleted": len(order_ids)})
+
+
 @app.put("/api/orders/<int:order_id>")
 @admin_required
 def update_order(order_id: int):
