@@ -599,11 +599,15 @@
   }
 
   @media print {
+    @page {
+      margin: 8mm;
+    }
+
     body {
       background: white !important;
       color: black !important;
-      font-size: 16pt !important;
-      line-height: 1.35 !important;
+      font-size: 12pt !important;
+      line-height: 1.2 !important;
     }
 
     header,
@@ -647,8 +651,10 @@
 
     .kitchen-print-title {
       display: block !important;
-      margin-bottom: 1.2rem;
-      font-size: 22pt !important;
+      margin-bottom: 0.45rem;
+      padding-bottom: 0.2rem;
+      border-bottom: 2px solid #111;
+      font-size: 17pt !important;
       line-height: 1.2 !important;
     }
 
@@ -662,29 +668,40 @@
 
     #kitchenReport {
       display: grid !important;
-      gap: 1.1rem !important;
+      gap: 0.25rem !important;
     }
 
     #kitchenReport .card-body {
       display: grid !important;
-      gap: 0.45rem !important;
+      gap: 0.12rem !important;
+      padding: 0.15rem 0 !important;
+    }
+
+    #kitchenReport article {
+      break-inside: avoid;
+      padding: 0.1rem 0 0.22rem !important;
+      border-bottom: 1px solid #777 !important;
     }
 
     #kitchenReport h3 {
-      font-size: 18pt !important;
+      font-size: 13.5pt !important;
       line-height: 1.2 !important;
-      margin: 0 0 0.15rem !important;
+      margin: 0 !important;
     }
 
     #kitchenReport h3 + div {
-      font-size: 17pt !important;
-      line-height: 1.45 !important;
+      font-size: 13pt !important;
+      line-height: 1.22 !important;
       font-weight: 700 !important;
     }
 
     .kitchen-notes {
-      font-size: 14pt !important;
-      line-height: 1.35 !important;
+      gap: 0 !important;
+      margin-top: 0.08rem !important;
+      padding-top: 0.08rem !important;
+      border-top: 0 !important;
+      font-size: 10.5pt !important;
+      line-height: 1.15 !important;
       font-weight: 600 !important;
     }
 
