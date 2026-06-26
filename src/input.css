@@ -244,6 +244,19 @@
     flex-wrap: wrap;
   }
 
+  .client-note-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 3rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid oklch(var(--b3));
+    border-radius: 0.65rem;
+    background: color-mix(in oklch, oklch(var(--b1)) 88%, oklch(var(--wa)) 12%);
+    font-size: 0.9rem;
+    font-weight: 800;
+  }
+
   .expiring-plan {
     display: flex;
     align-items: center;
@@ -290,6 +303,18 @@
     display: none;
     font-size: 1.2rem;
     font-weight: 800;
+  }
+
+  .print-only {
+    display: none;
+  }
+
+  .kitchen-notes {
+    display: grid;
+    gap: 0.2rem;
+    margin-top: 0.35rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid color-mix(in oklch, oklch(var(--bc)) 16%, transparent);
   }
 
   .plan-form-actions textarea {
@@ -590,7 +615,8 @@
     #settings,
     #kitchen .card-title,
     #kitchenDate,
-    #printKitchen {
+    #printKitchen,
+    #printActiveClients {
       display: none !important;
     }
 
@@ -598,6 +624,19 @@
     #kitchen,
     #kitchenReport,
     .view.active {
+      display: block !important;
+    }
+
+    .print-active-clients #kitchenReport,
+    .print-active-clients .kitchen-print-title {
+      display: none !important;
+    }
+
+    .print-kitchen #activeClientsPrint {
+      display: none !important;
+    }
+
+    .print-active-clients #activeClientsPrint {
       display: block !important;
     }
 
@@ -641,6 +680,53 @@
       font-size: 17pt !important;
       line-height: 1.45 !important;
       font-weight: 700 !important;
+    }
+
+    .kitchen-notes {
+      font-size: 14pt !important;
+      line-height: 1.35 !important;
+      font-weight: 600 !important;
+    }
+
+    #activeClientsPrint h2 {
+      margin-bottom: 1rem !important;
+      font-size: 20pt !important;
+      font-weight: 900 !important;
+    }
+
+    .active-clients-region {
+      break-inside: avoid;
+      margin-bottom: 1rem;
+    }
+
+    .active-clients-region h3 {
+      margin-bottom: 0.35rem;
+      font-size: 15pt;
+      font-weight: 900;
+    }
+
+    .active-clients-region h3 span {
+      font-size: 12pt;
+      font-weight: 700;
+    }
+
+    .active-clients-region table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11pt;
+      line-height: 1.25;
+    }
+
+    .active-clients-region th,
+    .active-clients-region td {
+      padding: 0.18rem 0.25rem;
+      border: 1px solid #222;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .active-clients-region th {
+      font-weight: 900;
     }
   }
 }

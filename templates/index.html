@@ -80,6 +80,10 @@
                   <option value="false">Nieaktywny</option>
                 </select>
                 <textarea name="notes" class="textarea textarea-bordered md:col-span-2" placeholder="Uwagi"></textarea>
+                <label class="client-note-toggle">
+                  <input name="show_kitchen_note" type="checkbox" class="checkbox" />
+                  <span>Pokaż notatkę w raporcie kuchni</span>
+                </label>
                 <div class="flex gap-2">
                   <button id="clientSubmitButton" class="btn btn-primary action-main" type="submit">Dodaj klienta</button>
                   <button id="clientCancelEdit" class="btn btn-outline hidden" type="button">Anuluj</button>
@@ -197,9 +201,10 @@
               <div class="flex flex-wrap gap-2 justify-between">
                 <h2 class="card-title">Raport kuchni</h2>
                 <h2 class="kitchen-print-title">Raport kuchni - <span id="kitchenPrintDate"></span></h2>
-                <div class="flex gap-2"><input id="kitchenDate" type="date" class="input input-bordered input-sm" /><button id="printKitchen" class="btn btn-sm btn-outline">Drukuj</button></div>
+                <div class="flex gap-2"><input id="kitchenDate" type="date" class="input input-bordered input-sm" /><button id="printKitchen" class="btn btn-sm btn-outline">Drukuj kuchnię</button><button id="printActiveClients" class="btn btn-sm btn-outline">Drukuj klientów</button></div>
               </div>
               <div id="kitchenReport" class="grid gap-3"></div>
+              <div id="activeClientsPrint" class="print-only"></div>
             </div>
           </div>
         </section>

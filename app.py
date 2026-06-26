@@ -79,6 +79,7 @@ class Client(db.Model):
     driver_id = db.Column(db.Integer, db.ForeignKey("drivers.id"), nullable=False)
     active = db.Column(db.Boolean, default=True, nullable=False)
     notes = db.Column(db.Text, default="")
+    show_kitchen_note = db.Column(db.Boolean, default=False, nullable=False)
 
 
 class Order(db.Model):
@@ -241,6 +242,11 @@ def migrate_db() -> None:
             db.session.commit()
     if "orders" in inspector.get_table_names() and "order_items" in inspect(db.engine).get_table_names():
         migrate_order_items()
+    if "clients" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("clients")}
+        if "show_kitchen_note" not in columns:
+            db.session.execute(text("ALTER TABLE clients ADD COLUMN show_kitchen_note BOOLEAN NOT NULL DEFAULT 0"))
+            db.session.commit()
 
 
 def migrate_order_items() -> None:
@@ -481,6 +487,7 @@ def serialize_state(user: User) -> dict:
                 "driver_id": row.driver_id,
                 "active": row.active,
                 "notes": row.notes or "",
+                "show_kitchen_note": bool(row.show_kitchen_note),
             }
             for row in clients_query.order_by(Client.name).all()
         ],
@@ -560,6 +567,7 @@ def add_client():
             region_id=payload["region_id"],
             driver_id=payload["driver_id"],
             notes=payload.get("notes", ""),
+            show_kitchen_note=bool(payload.get("show_kitchen_note", False)),
         )
     )
     db.session.commit()
@@ -580,6 +588,7 @@ def update_client(client_id: int):
     client.driver_id = payload["driver_id"]
     client.active = bool(payload.get("active", client.active))
     client.notes = payload.get("notes", "")
+    client.show_kitchen_note = bool(payload.get("show_kitchen_note", False))
     db.session.commit()
     return jsonify({"ok": True})
 

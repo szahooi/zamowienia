@@ -365,6 +365,7 @@ function renderClients() {
         <span>${client.phone || "Brak telefonu"}</span>
         <span>Rejon: ${nameOf(state.regions, client.region_id, "-")}</span>
         <span>Kierowca: ${nameOf(state.drivers, client.driver_id, "-")}</span>
+        ${client.show_kitchen_note ? `<span class="badge badge-warning">Notatka w kuchni</span>` : ""}
       </div>
       ${client.notes ? `<div class="text-sm">${client.notes}</div>` : ""}
       <div class="client-row-actions">
@@ -391,23 +392,67 @@ function kitchenTotals(dateText) {
 
 function renderKitchenInto(selector, dateText) {
   const totals = kitchenTotals(dateText);
-  if (!totals.length) {
+  const kitchenNotes = deliveriesFor(dateText)
+    .filter(({ client }) => client.show_kitchen_note && client.notes)
+    .map(({ client }) => client);
+  if (!totals.length && !kitchenNotes.length) {
     $(selector).innerHTML = empty();
     return;
   }
   const grouped = Object.groupBy ? Object.groupBy(totals, (row) => row.region_id) : totals.reduce((acc, row) => ((acc[row.region_id] ||= []).push(row), acc), {});
-  $(selector).innerHTML = Object.entries(grouped).map(([regionId, rows]) => `
+  const notesByRegion = Object.groupBy ? Object.groupBy(kitchenNotes, (client) => client.region_id) : kitchenNotes.reduce((acc, client) => ((acc[client.region_id] ||= []).push(client), acc), {});
+  const regionIds = Array.from(new Set([...Object.keys(grouped), ...Object.keys(notesByRegion)]));
+  $(selector).innerHTML = regionIds.map((regionId) => {
+    const rows = grouped[regionId] || [];
+    const notes = notesByRegion[regionId] || [];
+    return `
     <article class="card app-card bg-base-100 border"><div class="card-body">
       <h3 class="font-bold">${nameOf(state.regions, regionId, "Bez rejonu")}</h3>
-      <div>${rows.map((row) => `${nameOf(state.meals, row.meal_id, "-")}: ${row.quantity}`).join(" · ")}</div>
+      ${rows.length ? `<div>${rows.map((row) => `${nameOf(state.meals, row.meal_id, "-")}: ${row.quantity}`).join(" · ")}</div>` : ""}
+      ${notes.length ? `<div class="kitchen-notes"><strong>Notatki:</strong>${notes.map((client) => `<div>${client.name}: ${client.notes}</div>`).join("")}</div>` : ""}
     </div></article>
-  `).join("");
+  `;
+  }).join("");
+}
+
+function renderActiveClientsPrint() {
+  const activeClients = state.clients
+    .filter((client) => client.active)
+    .sort((a, b) => nameOf(state.regions, a.region_id, "").localeCompare(nameOf(state.regions, b.region_id, ""), "pl") || a.name.localeCompare(b.name, "pl"));
+  if (!activeClients.length) {
+    $("#activeClientsPrint").innerHTML = empty();
+    return;
+  }
+  const grouped = Object.groupBy ? Object.groupBy(activeClients, (client) => client.region_id) : activeClients.reduce((acc, client) => ((acc[client.region_id] ||= []).push(client), acc), {});
+  $("#activeClientsPrint").innerHTML = `
+    <h2>Lista aktywnych klientów według rejonu</h2>
+    ${Object.entries(grouped).map(([regionId, clients]) => `
+      <section class="active-clients-region">
+        <h3>${nameOf(state.regions, regionId, "Bez rejonu")} <span>${clients.length}</span></h3>
+        <table>
+          <thead><tr><th>Lp.</th><th>Klient</th><th>Adres</th><th>Telefon</th><th>Kierowca</th></tr></thead>
+          <tbody>
+            ${clients.map((client, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${client.name}</td>
+                <td>${client.address}</td>
+                <td>${client.phone || ""}</td>
+                <td>${nameOf(state.drivers, client.driver_id, "-")}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </section>
+    `).join("")}
+  `;
 }
 
 function renderKitchen() {
   const dateText = $("#kitchenDate").value;
   $("#kitchenPrintDate").textContent = dateText;
   renderKitchenInto("#kitchenReport", dateText);
+  renderActiveClientsPrint();
 }
 
 function renderOrders() {
@@ -691,7 +736,17 @@ function bindEvents() {
   $("#kitchenDate").addEventListener("change", renderKitchen);
   $("#driverSelect").addEventListener("change", renderDriver);
   $("#driverDate").addEventListener("change", renderDriver);
-  $("#printKitchen").addEventListener("click", () => window.print());
+  $("#printKitchen").addEventListener("click", () => {
+    document.body.classList.remove("print-active-clients");
+    document.body.classList.add("print-kitchen");
+    window.print();
+  });
+  $("#printActiveClients").addEventListener("click", () => {
+    document.body.classList.remove("print-kitchen");
+    document.body.classList.add("print-active-clients");
+    window.print();
+  });
+  window.addEventListener("afterprint", () => document.body.classList.remove("print-kitchen", "print-active-clients"));
   $("#clientCancelEdit").addEventListener("click", resetClientForm);
   $("#orderCancelEdit").addEventListener("click", resetOrderForm);
   $("#driverCancelEdit").addEventListener("click", resetDriverForm);
@@ -718,6 +773,7 @@ function bindEvents() {
     payload.region_id = id(payload.region_id);
     payload.driver_id = id(payload.driver_id);
     payload.active = payload.active === "true";
+    payload.show_kitchen_note = payload.show_kitchen_note === "on";
     const clientId = payload.id;
     delete payload.id;
     await api(clientId ? `/api/clients/${clientId}` : "/api/clients", { method: clientId ? "PUT" : "POST", body: JSON.stringify(payload) });
@@ -829,6 +885,7 @@ function bindEvents() {
       form.elements.driver_id.value = client.driver_id;
       form.elements.active.value = String(client.active);
       form.elements.notes.value = client.notes;
+      form.elements.show_kitchen_note.checked = Boolean(client.show_kitchen_note);
       $("#clientFormTitle").textContent = "Edytuj klienta";
       $("#clientSubmitButton").textContent = "Zapisz zmiany";
       $("#clientCancelEdit").classList.remove("hidden");
