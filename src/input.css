@@ -705,6 +705,51 @@
       font-weight: 600 !important;
     }
 
+    .print-kitchen {
+      font-size: 16pt !important;
+      line-height: 1.35 !important;
+    }
+
+    .print-kitchen .kitchen-print-title {
+      margin-bottom: 0.85rem;
+      padding-bottom: 0.3rem;
+      font-size: 22pt !important;
+      line-height: 1.2 !important;
+    }
+
+    .print-kitchen #kitchenReport {
+      gap: 0.7rem !important;
+    }
+
+    .print-kitchen #kitchenReport .card-body {
+      gap: 0.3rem !important;
+      padding: 0.25rem 0 0.45rem !important;
+    }
+
+    .print-kitchen #kitchenReport article {
+      padding: 0.2rem 0 0.55rem !important;
+      border-bottom: 1px solid #555 !important;
+    }
+
+    .print-kitchen #kitchenReport h3 {
+      font-size: 18pt !important;
+      line-height: 1.2 !important;
+    }
+
+    .print-kitchen #kitchenReport h3 + div {
+      font-size: 17pt !important;
+      line-height: 1.35 !important;
+      font-weight: 800 !important;
+    }
+
+    .print-kitchen .kitchen-notes {
+      margin-top: 0.18rem !important;
+      padding-top: 0.18rem !important;
+      font-size: 13pt !important;
+      line-height: 1.25 !important;
+      font-weight: 700 !important;
+    }
+
     #activeClientsPrint h2 {
       margin-bottom: 1rem !important;
       font-size: 20pt !important;

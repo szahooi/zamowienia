@@ -313,6 +313,8 @@ def register_payments_blueprint(app, db, get_current_user):
             client = row_value(row, "Imię i nazwisko / Nazwa firmy", "Imię i nazwisko", "Nazwa firmy", "Klient")
             if not order_no or not client:
                 continue
+            if order_no.upper().startswith("RE/"):
+                continue
             order = PaymentOrder.query.filter_by(order_no=order_no).first() or PaymentOrder(order_no=order_no, client=client)
             order.client = client
             order.created = row_value(row, "Sygnatura czasowa", "Data utworzenia")
@@ -330,6 +332,17 @@ def register_payments_blueprint(app, db, get_current_user):
             imported += 1
         db.session.commit()
         return imported
+
+    def next_manual_order_no() -> str:
+        year = date.today().year
+        prefix = f"RE/{year}/"
+        highest = 0
+        rows = PaymentOrder.query.filter(PaymentOrder.order_no.like(f"{prefix}%")).all()
+        for row in rows:
+            suffix = row.order_no.rsplit("/", 1)[-1]
+            if suffix.isdigit():
+                highest = max(highest, int(suffix))
+        return f"{prefix}{highest + 1:03d}"
 
     @bp.before_request
     def guard():
@@ -378,6 +391,31 @@ def register_payments_blueprint(app, db, get_current_user):
             item.price = decimal_amount(data.get("price"))
         db.session.commit()
         return jsonify(item.to_dict())
+
+    @bp.route("/api/orders/manual", methods=["POST"])
+    def add_manual_order():
+        data = request.get_json() or {}
+        client = (data.get("client") or "").strip()
+        if not client:
+            return jsonify({"error": "Podaj klienta."}), 400
+        order = PaymentOrder(
+            order_no=next_manual_order_no(),
+            created=date.today().isoformat(),
+            client=client,
+            phone=(data.get("phone") or "").strip(),
+            email=(data.get("email") or "").strip(),
+            order_type="Ręczne",
+            subscription=(data.get("subscription") or "").strip(),
+            period=(data.get("period") or "").strip(),
+            payment_method=(data.get("paymentMethod") or "").strip(),
+            start_date=(data.get("startDate") or "").strip(),
+            portions=decimal_from_text(data.get("portions")),
+            address=(data.get("address") or "").strip(),
+            notes=(data.get("notes") or "").strip(),
+        )
+        db.session.add(order)
+        db.session.commit()
+        return jsonify(order.to_dict())
 
     @bp.route("/api/payments", methods=["POST"])
     def add_payment():

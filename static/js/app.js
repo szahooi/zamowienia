@@ -401,7 +401,8 @@ function renderKitchenInto(selector, dateText) {
   }
   const grouped = Object.groupBy ? Object.groupBy(totals, (row) => row.region_id) : totals.reduce((acc, row) => ((acc[row.region_id] ||= []).push(row), acc), {});
   const notesByRegion = Object.groupBy ? Object.groupBy(kitchenNotes, (client) => client.region_id) : kitchenNotes.reduce((acc, client) => ((acc[client.region_id] ||= []).push(client), acc), {});
-  const regionIds = Array.from(new Set([...Object.keys(grouped), ...Object.keys(notesByRegion)]));
+  const regionIds = Array.from(new Set([...Object.keys(grouped), ...Object.keys(notesByRegion)]))
+    .sort((a, b) => nameOf(state.regions, a, "Bez rejonu").localeCompare(nameOf(state.regions, b, "Bez rejonu"), "pl"));
   $(selector).innerHTML = regionIds.map((regionId) => {
     const rows = grouped[regionId] || [];
     const notes = notesByRegion[regionId] || [];
